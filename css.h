@@ -12,7 +12,7 @@ extern "C" {
 
 struct CssValue
 {
-	void **resolverParameters;
+	volatile void **resolverParameters;
 	char resolverParameterType;
 	char type;
 	float numericValue;
@@ -22,7 +22,7 @@ struct CssValue
 	char *(*output)(const struct CssValue * const);
 	void *(*input)(struct CssValue * const, const void * const);
 	void *(*inputF)(struct CssValue * const, const float * const, const char * const);
-	float (*numericResolver)(struct CssValue * const, void * const);
+	float (*numericResolver)(struct CssValue * const, volatile void * const);
 };
 
 struct CssKeyValuePair

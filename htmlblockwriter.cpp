@@ -52,37 +52,43 @@ int main(void) {
 	struct LinkList * newLinkList;
 	newLinkList = LinkListCreate( NULL );
 	printf("created a linked list of length %i\n",newLinkList->listLength);
-	ListItemPush(newLinkList->firstItem, &testSix);
+/*	ListItemPush(newLinkList->firstItem, &testSix);*/
 		
 	struct HtmlBlock testHtml;
 	initializeHtmlBlock( &testHtml, htmlTag, htmlId, htmlClass, &testSix, NULL, NULL, 0 );
 	
 	printf("creating a void** item...\n");
 	
-	void ** newListContents = (void **)malloc(sizeof(void *));
-	newListContents[0] = &testHtml;
+	volatile void ** newListContents = (volatile void **)malloc(sizeof(void *));
+/*	newListContents[0] = &testHtml;*/
+newListContents = (volatile void **)testParameters;
 	
 	printf("pushing new item...\n");
 	printf("the link list object is at %p\n", newLinkList);
 	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-	
-	printf("\n%i\n",newLinkList->listLength);
-	printf("I'm packing float** %p into a list item. its first value is %f at %p\n", testParameters, (*testParameters)[0], *testParameters);
-	ListItemPush( newLinkList->lastItem, testParameters );
-	
-	printf("\n\n\n\nvoid* entry is: %p\n", *((void**)ListItemGet(newLinkList->lastItem, 1)));
-	printf("dereferenced it is: %p %i %f\n", *((void**)ListItemGet(newLinkList->lastItem, 1)),*((void**)ListItemGet(newLinkList->lastItem, 1)),*((void**)ListItemGet(newLinkList->lastItem, 1)));
-	
-	void ** recoveredarray = (void **)ListItemGet(newLinkList->lastItem, 1);
-	printf("I have recovered the void* %p\n", recoveredarray);
-	
-	float ** recoveredFloatList = (float**)(recoveredarray);
-	printf("%p:%p\n", testParameters[1], recoveredarray[1]);
-	printf("%f\n",*testParameters[1]);
+	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
+		LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
+/*	
+*	printf("\n%i\n",newLinkList->listLength);
+*	printf("I'm packing float** %p into a list item. its first value is %f at %p\n", testParameters, (*testParameters)[0], *testParameters);
+*/
+	/*ListItemPush( newLinkList->lastItem, testParameters );*/
+/*	
+*	printf("\n\n\n\nvoid* entry is: %p\n", *((void**)ListItemGet(newLinkList->lastItem, 1)));
+*	printf("dereferenced it is: %p %i %f\n", *((void**)ListItemGet(newLinkList->lastItem, 1)),*((void**)ListItemGet(newLinkList->lastItem, 1)),*((void**)ListItemGet(newLinkList->lastItem, 1)));
+*	
+*	void ** recoveredarray = (void **)ListItemGet(newLinkList->lastItem, 1);
+*	printf("I have recovered the void* %p\n", recoveredarray);
+*	
+*	float ** recoveredFloatList = (float**)(recoveredarray);
+*	printf("%p:%p\n", testParameters[1], recoveredarray[1]);
+*	printf("%f\n",*testParameters[1]);
+*
+*/
 
-
-
-
+	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
+		LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
+			LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
 
 
 
@@ -99,51 +105,65 @@ int main(void) {
 
 
 
-
-
 	
-	printf("%f:%f:%f\n", fValueTwo, *testParameters[1], *(float*)recoveredarray[1]);
+	/*printf("%f:%f:%f\n\n\n\n\n\n\n", fValueTwo, *testParameters[1], *(float*)recoveredarray[1]);*/
 	
-	for(int i = 0; 0 && i < 500; i++){
+	for(int i = 0; i < 500; i++){
 		for(int j = 0; j < 800; j++){
 
-			fValueFour = .5 * cos(i/100.0) * sin((i+j)/(5.0 + sin((i*j)/77.0))) / (80.0/j);
-			fValueThree=(i*j)/(i*j+1);
-			testSix.setFValueByKey(&testSix, CSSKEYOPACITY, &fValueFour, "");
-
-			if(i%3 == 0){
-				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorFour);
-				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorOne);
-				
-			}
-			if((i*j)%13 == 0){
-				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorTwo);
-				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorFour);
-			}
-			if(i%7 == 0){
-				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorTwo);
-				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorThree);
-			}
-			if(i%11 == 0){
-				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorOne);
-				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorThree);
-			}
+			/*fValueFour = .5 * cos(i/100.0) * sin((i+j)/(5.0 + sin((i*j)/77.0))) / (80.0/j);*/
+			/*fValueThree=(i*j)/(i*j+1);*/
+			/*testSix.setFValueByKey(&testSix, CSSKEYOPACITY, &fValueFour, "");*/
+/*
+*			if(i%3 == 0){
+*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorFour);
+*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorOne);
+*				
+*			}
+*			if((i*j)%13 == 0){
+*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorTwo);
+*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorFour);
+*			}
+*			if(i%7 == 0){
+*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorTwo);
+*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorThree);
+*			}
+*			if(i%11 == 0){
+*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorOne);
+*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorThree);
+*			}
+*
+*/			
+LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
+	result = testSix.printBlockDefault(&testSix);
+	
+	/*testHtml.printBlock(&testHtml);		*/
 			
-
-			result = testHtml.printBlock(&testHtml);
-			printf("%s", result );
+			
+			/*printf("%s", result );*/
 		
-			free(result);
+			/*void ** newStringContents = (void **)malloc(sizeof(void *));
+			*newStringContents[0] = &result;
+		*/
+		/*	LinkListPush(newLinkList, LINKLISTBASIC, newStringContents, sizeof(char*), 1);*/
+		
+		/*
+		*	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
+		*/
+			
+		
+			/*free(result);*/
 
 
 		}
 			
-		printf("<br>");	
+		/*printf("<br>");	*/
 			
 	}
 
-	printf("</body></html>");
-
-	printf("\n");
+/*	printf("</body></html>");
+*
+*	printf("\n");
+*/
 	return 0;
 }

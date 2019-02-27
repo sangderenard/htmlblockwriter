@@ -34,12 +34,13 @@ struct ManagedDoubleVoid{
 	int maxLength;
 	size_t size;
 	int resizeCount;
-	void ** self;
+	volatile void ** self;
 };
 
 char updateDoubleVoid(struct ManagedDoubleVoid * const me){
 	printf("Updating the double void...\n");
 	if( me->self == NULL ){
+		printf("I'm brand new...\n");
 		/*exit(0);*/
 		me->resizeCount = 0;
 		me->size = 0;
@@ -47,24 +48,28 @@ char updateDoubleVoid(struct ManagedDoubleVoid * const me){
 		me->length = 0;
 		me->method = DOUBLEVOIDLINEAR;
 		me->temperment = DOUBLEVOIDCONSERVATIVE;
-		me->self = (void**)malloc(sizeof(void*));
+		me->self = (volatile void**)malloc(sizeof(void*));
 		/*(me->self)[0] = NULL;*/
 		printf("Performed initialization, content at %p...\n", me->self);
+	}else{
+		printf("I've been around before\n");
 	}
-	
 	/* i think initial length needs are different for new entry vs blank initialization */
 	
 	int requiredLength;
 	size_t requiredSize;
+	printf("entering switch block...\n");
+	printf("I have temperment %i\n", me->temperment);
 	switch( me->temperment ){
 		case DOUBLEVOIDCONSERVATIVE:
+		printf("entering conservative algorithm\n");
 			requiredLength = me->length + DOUBLEVOIDMINIMUMBUFFER;
 			requiredSize = ( requiredLength * sizeof(void *) );
 			printf("requiredsize is %i (%i %i %i)\n", requiredSize, me->length, DOUBLEVOIDMINIMUMBUFFER, sizeof(void*));
 		printf("required length is %i, used length is %i\n", requiredLength, me->length);
 
 			if( requiredSize > me->size ){
-				void ** newSelf = (void **)malloc( requiredSize );
+				volatile void ** newSelf = (volatile void **)malloc( requiredSize );
 				
 				printf("beginning transfer of %i items...\n", me->length-1);
 				
@@ -94,7 +99,7 @@ char scheduleUpdateDoubleVoid(struct ManagedDoubleVoid * const me){
 	return updateDoubleVoid(me);
 }
 
-void * doubleVoid(struct ManagedDoubleVoid * const me, const int i){
+volatile void * doubleVoid(struct ManagedDoubleVoid * const me, const int i){
 	if( me->lock == 1){
 		printf("the doublevoid lock is left on.\n");
 		return NULL;
@@ -119,7 +124,7 @@ void * doubleVoid(struct ManagedDoubleVoid * const me, const int i){
 		me->lock = 1;
 		me->length = i + 1;
 		me->lock = updateDoubleVoid(me);
-		me->self[i] = malloc(sizeof(void *));
+		me->self[i] = (volatile void * )malloc(sizeof(void *));
 		printf("i'm returning %p from within resize\n", (me->self)[i]);
 		printf("I was asked for index %i and had to generate space to fit it\n", i);
 		return (me->self)[i];
@@ -175,17 +180,33 @@ char LinkListLock( struct LinkList * me, const char lockType ){
 
 
 /*	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 ); */
-
-struct ListItem * ListItemPush( struct ListItem * , void * );
-
-struct ListItem * LinkListPush( struct LinkList * const me, const char behaviorType, void * * newContents, size_t newEntrySize, int contentsLength ){
+struct ListItem * ListItemPush( struct ListItem * me, volatile void * contentsEntry ){
+	me->itemLock = 1;
+	printf("I was asked to add pointer: %p to the item at %p with doublevoid %p\n", contentsEntry, me, &me->contents);
+/*	printf("If this is a pointer list the virst adress is: %p\n", ((float*)contentsEntry));
+*	printf("If this is a float pointer pointer list, the first float is %f\n", ((*(float**)contentsEntry))[0]);
+*	printf("calling doublevoid at index at %i\n", me->contents.length);
+*/
+	volatile void ** contentsTarget = (volatile void**)doubleVoid( &(me->contents), me->contents.length );
+	printf("doublevoid requested index void* is located at %p, it points to %p\n", contentsTarget, *contentsTarget);
+	*contentsTarget = contentsEntry;
+	printf("the doublevoid void* entry has been assigned value %p, is now %p at %p\n", contentsEntry, *contentsTarget, contentsTarget);
+	printf("the doublevoid reports a length of %i and lock state %i\n", me->contents.length, me->contents.lock );
+	printf("setting the length of the doublevoid to reflect our manual new entry\n");
+	
+	++(me->contents.length);
+	me->itemLock = 0;
+	
+	return me;
+}
+struct ListItem * LinkListPush( struct LinkList * const me, const char behaviorType, volatile void * * newContents, size_t newEntrySize, int contentsLength ){
 	printf("entering LinkListPush...\n");
 	if( behaviorType == LINKLISTBASIC ){
 		LinkListLock( me , LINKLISTLOCKLIST );
 		printf("creating the new item with %i entries of size %i...\n", contentsLength, newEntrySize);
 		
 		struct ListItem * newLinkListEntry = (struct ListItem *)malloc(sizeof(struct ListItem));
-		printf("gotta track down the corrupted memory\n");
+		printf("I'm pushing onto the data of the list item at address %p\n", newLinkListEntry);
 		/*this memory addressing will fail and is currently only set to first item*/
 
 
@@ -218,33 +239,17 @@ struct ListItem * LinkListPush( struct LinkList * const me, const char behaviorT
 		
 }
 
-void* ListItemGet( struct ListItem * me, const int index ){
-	return *(void**)doubleVoid( &(me->contents), index );
+volatile void* ListItemGet( struct ListItem * me, const int index ){
+	return *(volatile void**)doubleVoid( &(me->contents), index );
 }
 
-struct ListItem * ListItemPush( struct ListItem * me, void * contentsEntry ){
-	me->itemLock = 1;
-	printf("I was asked to add pointer: %p to the item\n", contentsEntry);
-	printf("If this is a pointer list the virst adress is: %p\n", ((float*)contentsEntry));
-	printf("If this is a float pointer pointer list, the first float is %f\n", ((*(float**)contentsEntry))[0]);
-	printf("calling doublevoid at index at %i\n", me->contents.length);
-	void ** contentsTarget = (void**)doubleVoid( &(me->contents), me->contents.length );
-	printf("doublevoid requested index void* is located at %p, it points to %p\n", contentsTarget, *contentsTarget);
-	*contentsTarget = contentsEntry;
-	printf("the doublevoid void* entry has been assigned value %p, is now %p at %p\n", contentsEntry, *contentsTarget, contentsTarget);
-	printf("the doublevoid reports a length of %i and lock state %i\n", me->contents.length, me->contents.lock );
-	printf("setting the length of the doublevoid to reflect our manual new entry\n");
-	
-	++(me->contents.length);
-	me->itemLock = 0;
-	
-	return me;
-}
+
 
 struct LinkList * LinkListCreate( struct ListItem * me){
 	if(me == NULL){
 		me = (struct ListItem *)malloc(sizeof(struct ListItem));
 		me->contents.length = 0;
+		
 		updateDoubleVoid(&(me->contents));
 	}
 	struct LinkList * newList = (struct LinkList *)(malloc(sizeof(struct LinkList)));

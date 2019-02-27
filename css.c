@@ -443,19 +443,21 @@ const char *CssKeyValuePairInput(struct CssKeyValuePair * const me , const char 
 	return NULL;
 }
 
-float CssValueDefaultResolver(struct CssValue * const me, void * const params){
+float CssValueDefaultResolver(struct CssValue * const me, volatile void * const params){
 	
 }
 
 struct CssValue *CssValueSetRatioResolver(struct CssValue * const me, float * parameterList[4]){
 	me->resolverType = RATIORESOLVER;
 	me->resolverParameterType = RESOLVERFLOAT;
-	me->resolverParameters = (void **)parameterList;
+	me->resolverParameters = (volatile void **)parameterList;
 	return me;
 }
 
 char *CssValueOutput(const struct CssValue * const me){
+
 	/*char * thisStringValue;*/
+	
 	float thisNumericValue = me->numericValue;
 	
 	if( me->resolverType != 0 ){
@@ -509,6 +511,7 @@ char *CssValueOutput(const struct CssValue * const me){
 		}
 		output[stringSize] = '\0';
 	}
+	
 	return output;
 }
 
@@ -635,9 +638,12 @@ char *CssStylePrintBlock(struct CssStyle * const me, const char * const keys, co
 	char * preappendedOutput[length];
 	
 	for(int i = 0; i < length; i++){
+		
 		char * newLine = me->getValueByKey(me, (char)keys[i]);
+		
 		preappendedOutput[i] = newLine;
 	}
+	
 	
 	return stringArrayCombine(preappendedOutput, length, '\0', '\0');
 	 
@@ -797,11 +803,23 @@ void initializeCssBox(struct CssBox * const me){
 	me->background.backgroundColor.setKey(&(me->background.backgroundColor), CSSKEYBACKGROUNDCOLOR);
 }
 
+
+
+
+
+
+/* if this is bypassed, there is no conflict, but if it is not bypassed, there is nothing
+ * which it calls which can be bypassed to resolve the conflict
+ */
+
+
+
 char *CssStyleGetByKey(struct CssStyle * const me, const char cssKey){
-					
+
 	char * output;
 	const struct CssKeyValuePair * target = (const struct CssKeyValuePair *)(me->getElement(me, cssKey, NULL));
 	output = target->output(target);
+	
 	return output;
 }
 
