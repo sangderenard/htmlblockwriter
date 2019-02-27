@@ -7,6 +7,9 @@ extern "C" {
 #include <string.h>
 #include "./basicutils.h"
 
+
+
+
 char *stringCopy(const char * const source){
 	size_t sourceSize = strlen(source);
 	if( sourceSize < 1 ){
