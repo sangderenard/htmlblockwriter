@@ -2,11 +2,9 @@
 extern "C" {
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "./basicutils.h"
-
+#include "./manageddoublevoid.c"
+#include "./linklist.c"
 
 
 
@@ -20,7 +18,7 @@ char *stringCopy(const char * const source){
 	++sourceSize;
 	char * output;
 	output = (char *)malloc(sourceSize);
-	for(int i = 0; i < sourceSize; i++){
+	for(unsigned int i = 0; i < sourceSize; i++){
 		output[i] = source[i];
 	}
 	return output;
@@ -80,6 +78,7 @@ char *stringArrayCombine(char * * strings, int length, const char middleChar, co
 			continue;
 		}
 		char * newOutput = stringCombine(output, strings[i], middleChar, endChar);
+
 		free(output);
 		output = newOutput;
 		++stringWritten;
@@ -97,6 +96,8 @@ const char addWithoutDuplicate(const char * const value, char ** array, int * si
 	*	exit(1);
 	*}
 	* */
+	
+	
 	int newSize = *size + 1;
 	char * oldArray = *array;
 	char * newArray = (char *)malloc(newSize);
@@ -104,38 +105,17 @@ const char addWithoutDuplicate(const char * const value, char ** array, int * si
 	for(int i = 0; i < *size; ++i){
 		if( oldArray[i] == *value ){
 			free(newArray);
-		/*	printf("this one would be a duplicate \"%i\":\"%i\":\"%i\"\n", oldArray[i], *value, *size);
-		*	exit(1);
-		*/
 			return '\0';
 		}
-		/*printf("before:  i:\"%i\" *value:\"%i\" array[%i]:\"%i\"\n", i, *value, i, oldArray[i]);*/
 		newArray[i] = oldArray[i];
-		/*printf("after:   i:\"%i\" *value:\"%i\" array[%i]:\"%i\" newarray[%i]:\"%i\"\n", i, *value, i, oldArray[i], i, newArray[i]);*/
 	}
 	newArray[*size] = *value;
-/*	
-*		for(int i = 0; i < newSize; i++){
-*		printf("array: %i\n", oldArray[i]);
-*	}
-*		for(int i = 0; i < newSize; i++){
-*		printf("newarray: %i\n", newArray[i]);
-*	}
-*	
-*	printf("%p\n", oldArray);
-*/
+
 /*	free(*array);*/
+
 	*array = newArray;
-/*	printf("newSize: \"%i\"\n", newSize);
-*	printf("%i:%i\n", (*array)[*size], newArray[*size]);
-*/
 	*size = newSize;
 	
-/*	for(int i = 0; i < *size; i++){
-*		printf("recap: %i\n", (*array)[i]);
-*	}
-*/	
-/*	printf("%p\n", *array);*/
 	return '\1';
 }
 

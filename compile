@@ -1,0 +1,1 @@
+clear; clear; clear; gcc -pthread -o htmlblockwriter htmlblockwriter.cpp -lm -g

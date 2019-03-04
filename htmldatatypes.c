@@ -12,9 +12,10 @@ extern "C" {
 
 
 char * HtmlPrintBlock(struct HtmlBlock * const me){
-	size_t tagSize = strlen(me->htmlTag);
-	size_t idSize = strlen(me->htmlId);
-	size_t classSize = strlen(me->htmlClass);
+	/*size_t tagSize = strlen(me->htmlTag);
+	*size_t idSize = strlen(me->htmlId);
+	*size_t classSize = strlen(me->htmlClass);
+	*/
 	
 	char * styleBlock;
 	styleBlock = me->htmlStyle->printBlockDefault(me->htmlStyle);
@@ -42,8 +43,6 @@ char * HtmlPrintBlock(struct HtmlBlock * const me){
 
 
 struct HtmlBlock * initializeHtmlBlock(struct HtmlBlock * const me, char * newTag, char * newId, char * newClass, struct CssStyle * htmlStyle, struct HtmlBlock * htmlParent, struct HtmlBlock * * htmlChildren, const int childCount){
-	/*printf("initializing html");	*/
-	
 	me->printBlock = &HtmlPrintBlock;
 	
 	if(htmlChildren != NULL){
@@ -70,8 +69,7 @@ struct HtmlBlock * initializeHtmlBlock(struct HtmlBlock * const me, char * newTa
 		me->htmlClass = newClass;
 	}
 	
-	
-	/*printf("initialized html");	*/
+	return me;
 }
 
 

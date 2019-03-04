@@ -1,6 +1,9 @@
 #include <stdio.h>
+#include <sys/time.h>
+#include <limits.h>
 
 #include "./htmldatatypes.c"
+
 
 #define DIV "div"
 #define ID "id="
@@ -10,160 +13,99 @@
 
 
 char *divGrid(int width, int height, char style){
-	
+	return NULL;
 }
 
 int main(void) {
-	printf("<html><head><meta charset='utf-8'></head>");
-	printf("<body style=\"padding-bottom: 2px; font-size: 0px; white-space: nowrap;\">");
-
-	char value[] = "inline-block";
-
-	struct CssStyle testSix;
-	initializeCssStyle(&testSix);
-
-	float fValue = .5;
-	float fValueTwo = 3200;
-	float fValueThree = 0;
-	float fValueFour = 1;
 	
-	float *testParameters[4] = { &fValue, &fValueTwo, &fValueThree, &fValueFour };
+	int maxPageCount=20;
+	int maxThreadCount=20;
+	int memosPerPage=20;
 	
-	char * result;
+	struct ThreadManagerCache * testThreadManagerCache;
+	
+	testThreadManagerCache =  InitializeTheThreadManager( maxPageCount, maxThreadCount, memosPerPage );
+	
+	/* double void initialization process */
+	
+	struct ManagedDoubleVoid * testDoubleVoid = (struct ManagedDoubleVoid	*)malloc(sizeof(struct ManagedDoubleVoid));
+	struct ThreadManagerPostOfficeBox * testDoubleVoidPostBox = DoubleVoidThreadManagerHandshake( testDoubleVoid, testThreadManagerCache );
+	defineDoubleVoidFunctions();
+	pthread_mutex_lock( testDoubleVoid->myThreadControlLock );	
+	initializeDoubleVoid( testDoubleVoid, NULL );
+	testDoubleVoid->theCache = testThreadManagerCache;
+	pthread_mutex_unlock( testDoubleVoid->myThreadControlLock );
+	
+	/* end double void initialization process */
 		
-	char stylesToPrint[] = { CSSKEYMARGINLEFT, CSSKEYWIDTH, CSSKEYHEIGHT, CSSKEYMARGIN, CSSKEYDISPLAY };
-	testSix.setFValueByKey(&testSix, CSSKEYOPACITY, &fValue, "");
-	CssValueSetRatioResolver(&(testSix.box.opacity.cssValue), testParameters);
-	testSix.setFValueByKey(&testSix, CSSKEYWIDTH, &fValueFour, "px");
-	testSix.setFValueByKey(&testSix, CSSKEYHEIGHT, &fValueFour, "px");
-	testSix.setValueByKey(&testSix, CSSKEYDISPLAY, value);
-	fValueFour = 0;
+	struct ListItem * testListItem = (struct ListItem *)malloc(sizeof(struct ListItem));
+	struct ThreadManagerPostOfficeBox * testListItemPostBox = ListItemThreadManagerHandshake(  testListItem, testThreadManagerCache );
+	defineListItemFunctions();
 	
+	testListItem = ListItemCreate( testListItem, testThreadManagerCache );
 	
-	char colorOne[] = "Red";
-	char colorTwo[] = "Blue";
-	char colorThree[] = "Yellow";
-	char colorFour[] = "Green";
-	
-	char htmlTag[] = "DIV";
-	char htmlId[] = "thisismyid";
-	char htmlClass[] = "thisismyclass";
-	
-	struct LinkList * newLinkList;
-	newLinkList = LinkListCreate( NULL );
-	printf("created a linked list of length %i\n",newLinkList->listLength);
-/*	ListItemPush(newLinkList->firstItem, &testSix);*/
-		
-	struct HtmlBlock testHtml;
-	initializeHtmlBlock( &testHtml, htmlTag, htmlId, htmlClass, &testSix, NULL, NULL, 0 );
-	
-	printf("creating a void** item...\n");
-	
-	volatile void ** newListContents = (volatile void **)malloc(sizeof(void *));
-/*	newListContents[0] = &testHtml;*/
-newListContents = (volatile void **)testParameters;
-	
-	printf("pushing new item...\n");
-	printf("the link list object is at %p\n", newLinkList);
-	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-		LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-/*	
-*	printf("\n%i\n",newLinkList->listLength);
-*	printf("I'm packing float** %p into a list item. its first value is %f at %p\n", testParameters, (*testParameters)[0], *testParameters);
-*/
-	/*ListItemPush( newLinkList->lastItem, testParameters );*/
-/*	
-*	printf("\n\n\n\nvoid* entry is: %p\n", *((void**)ListItemGet(newLinkList->lastItem, 1)));
-*	printf("dereferenced it is: %p %i %f\n", *((void**)ListItemGet(newLinkList->lastItem, 1)),*((void**)ListItemGet(newLinkList->lastItem, 1)),*((void**)ListItemGet(newLinkList->lastItem, 1)));
-*	
-*	void ** recoveredarray = (void **)ListItemGet(newLinkList->lastItem, 1);
-*	printf("I have recovered the void* %p\n", recoveredarray);
-*	
-*	float ** recoveredFloatList = (float**)(recoveredarray);
-*	printf("%p:%p\n", testParameters[1], recoveredarray[1]);
-*	printf("%f\n",*testParameters[1]);
-*
-*/
+	/*
+	*struct LinkList	* testLinkList = (struct LinkList *)malloc(sizeof(struct LinkList));
+	*
+	*struct ThreadManagerPostOfficeBox * testListListPostBox = LinkListThreadManagerHandshake( testLinkList, testThreadManagerCache );
+	*/
+	/*void * testObjects[] = { testDoubleVoid, testListItem, testLinkList };*/
 
-	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-		LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-			LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-
-
-
-/*
- * 
- * behavior of the dynamic array and linked list is currently as expected as implemented
- * considerable effort will need to be expended in noticing why things work now
- * and what has been left behind from previous ideas of how it should work
- * 
- * maybe make a goddamn chart telling you that *pointer is the value at a pointer
- * because you can't seem to fucking remember that.
- */
-
-
-
-
+	int testLength = 1000000;
 	
-	/*printf("%f:%f:%f\n\n\n\n\n\n\n", fValueTwo, *testParameters[1], *(float*)recoveredarray[1]);*/
+	int verbosity = 0;
 	
-	for(int i = 0; i < 500; i++){
-		for(int j = 0; j < 800; j++){
+	for( int i = 0; i < 2; ++i ){
 
-			/*fValueFour = .5 * cos(i/100.0) * sin((i+j)/(5.0 + sin((i*j)/77.0))) / (80.0/j);*/
-			/*fValueThree=(i*j)/(i*j+1);*/
-			/*testSix.setFValueByKey(&testSix, CSSKEYOPACITY, &fValueFour, "");*/
-/*
-*			if(i%3 == 0){
-*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorFour);
-*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorOne);
-*				
-*			}
-*			if((i*j)%13 == 0){
-*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorTwo);
-*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorFour);
-*			}
-*			if(i%7 == 0){
-*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorTwo);
-*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorThree);
-*			}
-*			if(i%11 == 0){
-*				testSix.setValueByKey(&testSix, CSSKEYCOLOR, colorOne);
-*				testSix.setValueByKey(&testSix, CSSKEYBACKGROUNDCOLOR, colorThree);
-*			}
-*
-*/			
-LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-	result = testSix.printBlockDefault(&testSix);
-	
-	/*testHtml.printBlock(&testHtml);		*/
+		for( int j = 0; j < testLength; ++j ){
+			
+			int r = rand();
+			/*usleep((10*r)/INT_MAX);  */
+
 			
 			
-			/*printf("%s", result );*/
+			if( i == 0 ){
+				int * testValue = (int *)(malloc(sizeof(int)));
+				*testValue = j;
+		/*		DoubleVoidKnock( testDoubleVoid );
+		*		testDoubleVoid->func->push( testDoubleVoid, testValue );
+		*		
+		*		printf("push(%i):%i     \r",j, *testValue); 
+		*		DoubleVoidRelease( testDoubleVoid );
+		*/		
+				testListItem->func->push( testListItem, testValue );
+				
+				/*free( testValue );*/
+			}else if( i == 1 ){
+				/*testDoubleVoid->func->pop( testDoubleVoid, 1 );*/
+				/*DoubleVoidKnock( testDoubleVoid );
+				*int * returnedTestValue = (int *)(testDoubleVoid->func->pop( testDoubleVoid, 1 ));
+				
+				*printf("pop(%i):%i       \r",j,*returnedTestValue );
+				*DoubleVoidRelease( testDoubleVoid );
+				*/
+				
+				int * returnedValue = (int *)(testListItem->func->pop( testListItem, 1 ));
+				printf("%i        \r", *returnedValue );
+				
+				/*free(returnedTestValue);*/
+			}else if( i == 2){
+				int testIndex = (testLength*(float)r)/(float)INT_MAX;
+				/*remember to cast to avoid integer math*/
+				/*int testIndex = j*20;*/
+				DoubleVoidKnock( testDoubleVoid );
+				testDoubleVoid->func->set( testDoubleVoid, testIndex, &testIndex );
+				int * returnedTestValue = (int *)(testDoubleVoid->func->get( testDoubleVoid, testIndex ));
+				
+				printf("set(%i):get(%i):%i         \r", testIndex, testIndex, *returnedTestValue);
+				DoubleVoidRelease( testDoubleVoid );
+			}
 		
-			/*void ** newStringContents = (void **)malloc(sizeof(void *));
-			*newStringContents[0] = &result;
-		*/
-		/*	LinkListPush(newLinkList, LINKLISTBASIC, newStringContents, sizeof(char*), 1);*/
-		
-		/*
-		*	LinkListPush(newLinkList, LINKLISTBASIC, newListContents, sizeof(struct HtmlBlock *), 1 );
-		*/
-			
-		
-			/*free(result);*/
-
-
 		}
-			
-		/*printf("<br>");	*/
-			
-	}
 
-/*	printf("</body></html>");
-*
-*	printf("\n");
-*/
+		printf("\n");
+	}
+	
+	
 	return 0;
 }
