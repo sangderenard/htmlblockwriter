@@ -2,81 +2,16 @@
 extern "C" {
 #endif
 
-/* 
- * 
- * 
- * 
- * 
- * the next thing to fix is the struct that makes up each link
- * of my linked list. but, seeing as, as far as I can tell, 
- * the multithreaded dynamic array is working well enough 
- * to fill in the functional details later
- * 
- * and since I am not sure that's really true and I just don't
- * realize how buggy it still is...
- * 
- * 
- * I think this is a good time to stop for the night.
- * 
- * 
- * */
-
-
-
+struct FunctionSet LinkListFunctionSet;
 struct FunctionSet ListItemFunctionSet;
 
 
 
-
-
-
-
-
-
-
-
-struct ListItem * LinkListGet( struct LinkList * const me, void * identifier, const char identifyStyle){
-	struct ListItem * currentIndex = me->firstItem;
-	switch(identifyStyle){
-		case LINKLISTBASIC:
-		
-			for( int i = 0; i < *((int*)identifier); i++ ){
-				currentIndex = currentIndex->nextItem;
-			}
-		
-			return currentIndex;
-			break;
-			
-	}
-	
-	return NULL;
-}
-
-struct ListItem * LinkListPop( struct LinkList * const me ){
-	if( me->listLength == 1 ){
-			return NULL;
-	}
-	LinkListLock( me, LINKLISTLOCKLIST );
-	struct ListItem * output = me->lastItem;
-	me->lastItem = output->previousItem;
-	me->lastItem->nextItem = NULL;
-	--(me->listLength);
-	me->listLock = 0;
-	return output;
-}
-
-
-ThreadManagerPostOfficeBox * LinkListThreadManagerHandshake( struct LinkList * me, struct ThreadManagerCache * threadManagerCache ){
-	me->myPostbox = simpleKeyRequest( threadManagerCache, NULL );
-	pthread_mutex_lock( me->myPostbox->mailboxKey );
-	me->myThreadControlLock = me->myPostbox->mailboxKey;
-	pthread_mutex_unlock( me->myPostbox->mailboxKey );
-}
-
 ThreadManagerPostOfficeBox * ListItemThreadManagerHandshake( struct ListItem * me, struct ThreadManagerCache * threadManagerCache ){
 	me->myPostbox = simpleKeyRequest( threadManagerCache, NULL );
 	pthread_mutex_lock( me->myPostbox->mailboxKey );
-	me->myThreadControlLock = me->myPostbox->mailboxKey;
+	me->myThreadControlPostbox = simpleKeyRequest( threadManagerCache, NULL );
+	me->myThreadControlLock = me->myThreadControlPostbox->mailboxKey;
 	pthread_mutex_unlock( me->myPostbox->mailboxKey );
 }
 struct ListItem * ListItemCreate( struct ListItem * me, struct ThreadManagerCache * theCache ){
@@ -90,30 +25,62 @@ struct ListItem * ListItemCreate( struct ListItem * me, struct ThreadManagerCach
 	me->contents.self=NULL;
 	me->func = &ListItemFunctionSet;
 	
+	me->previousItem = NULL;
+	me->nextItem = NULL;
 	
-	struct ThreadManagerPostOfficeBox * contentsMailbox = DoubleVoidThreadManagerHandshake( &(me->contents), theCache );
-	pthread_mutex_lock( me->contents.myThreadControlLock );
-	initializeDoubleVoid( &(me->contents), NULL );
-	me->contents.theCache = theCache;
-	pthread_mutex_unlock( me->contents.myThreadControlLock );
+	ListItemThreadManagerHandshake(  me, theCache );
 	
-	ListItemThreadManagerHandshake( me, theCache );
+	initializeDoubleVoid( &(me->contents), NULL, theCache );
 	
 	return me;
 }
 
 void ListItemKnock( struct ListItem * me ){
 	int waiter = 0;
+	/*printf("I'm %p", me);*/
 	while( pthread_mutex_trylock( me->myThreadControlLock ) ){
-		if(waiter < 200){
+	/*	if(waiter < 200){*/
 			++waiter;
-		}
-		usleep(waiter);
+			if(waiter > 10){exit(1);}
+		/*}*/
+		int sleep = floor(((float)(float)waiter * (float)rand()) / (float)INT_MAX);
+		if(verbosity > 3){ printf("usleep(%i) in LI Knock\n",sleep); }
+		usleep(sleep);
 	}
 }
 
 void ListItemRelease( struct ListItem * me ){
 	pthread_mutex_unlock( me->myThreadControlLock );
+}
+
+char ListItemSet(void * self, const int index, void * input){
+	struct ListItem * me = (struct ListItem *)self; 
+	/*printf("looking for %i entry in %p", index, &(me->contents));*/
+	/*sleep(1);*/
+	ListItemKnock( me );
+	DoubleVoidKnock( &(me->contents) );
+	me->contents.func->set( &(me->contents), index, input );
+	DoubleVoidRelease( &(me->contents) );
+	ListItemRelease( me );
+}
+
+void* ListItemGet( void * self, int index ){
+	struct ListItem * me = (struct ListItem *)self;
+	ListItemKnock( me );
+	DoubleVoidKnock( &(me->contents) );
+	void * returnValue = DoubleVoidGet( &(me->contents), index );
+	DoubleVoidRelease( &(me->contents) );
+	ListItemRelease( me );
+	return returnValue;
+}
+
+char ListItemPush( void * self, void * contentsEntry ){
+	struct ListItem * me = (struct ListItem *)self;
+	ListItemKnock( me );
+	DoubleVoidKnock( &(me->contents) );
+	me->contents.func->push( &(me->contents), contentsEntry );
+	DoubleVoidRelease( &(me->contents) );
+	ListItemRelease( me );
 }
 
 void * ListItemPop( void * self, int count){
@@ -136,34 +103,6 @@ void * ListItemPop( void * self, int count){
 	}
 }
 
-char ListItemPush( void * self, void * contentsEntry ){
-	struct ListItem * me = (struct ListItem *)self;
-	ListItemKnock( me );
-	DoubleVoidKnock( &(me->contents) );
-	me->contents.func->push( &(me->contents), contentsEntry );
-	DoubleVoidRelease( &(me->contents) );
-	ListItemRelease( me );
-}
-
-void* ListItemGet( void * self, int index ){
-	struct ListItem * me = (struct ListItem *)self;
-	ListItemKnock( me );
-	DoubleVoidKnock( &(me->contents) );
-	void * returnValue = DoubleVoidGet( &(me->contents), index );
-	DoubleVoidRelease( &(me->contents) );
-	ListItemRelease( me );
-	return returnValue;
-}
-
-char ListItemSet(void * self, const int index, void * input){
-	struct ListItem * me = (struct ListItem *)self; 
-	ListItemKnock( me );
-	DoubleVoidKnock( &(me->contents) );
-	me->contents.func->set( &(me->contents), index, input );
-	DoubleVoidRelease( &(me->contents) );
-	ListItemRelease( me );
-}
-
 void defineListItemFunctions(){
 	defineDoubleVoidFunctions();
 	ListItemFunctionSet.get = &ListItemGet;
@@ -177,65 +116,175 @@ void defineListItemFunctions(){
 
 }
 
-/* this needs to be changed over to reflect the use of multiple threads
- * and mutex's as soon as possible */
+ThreadManagerPostOfficeBox * LinkListThreadManagerHandshake( struct LinkList * me, struct ThreadManagerCache * threadManagerCache ){
+	me->myPostbox = simpleKeyRequest( threadManagerCache, NULL );
+	pthread_mutex_lock( me->myPostbox->mailboxKey );
+	me->myThreadControlPostbox = simpleKeyRequest( threadManagerCache, NULL );
+	me->myThreadControlLock = me->myThreadControlPostbox->mailboxKey;
+	pthread_mutex_unlock( me->myPostbox->mailboxKey );
+}
 
-char LinkListLock( struct LinkList * me, const char lockType ){
-	if( me->listLock == 0 ){
-		switch(lockType){
-			case LINKLISTLOCKLIST:
-				me->listLock = 1;
-			case LINKLISTLOCKINDEX:
-				me->indexLock = 1;
-			case LINKLISTLOCKSPECIAL:
-				me->specialLock = 1;
+
+struct LinkList * LinkListCreate( struct LinkList * me, struct ThreadManagerCache * theCache){
+	if( me == NULL ){
+		me = (struct LinkList *)(malloc(sizeof(struct LinkList)));
+	}
+	me->func = &LinkListFunctionSet;
+	me->theCache = theCache;
+	
+	LinkListThreadManagerHandshake( me, theCache );
+	
+	me->indexLock = 1;
+	me->specialLock = 1;
+	me->firstItem = NULL;
+	me->lastItem = NULL;
+	
+	me->listLength = 0;
+	
+	return me;
+}
+
+void LinkListKnock( struct LinkList * me ){
+	int waiter = 0;
+	while( pthread_mutex_trylock( me->myThreadControlLock ) ){
+		if(waiter < 200){
+			++waiter;
 		}
-		
-		return LINKLISTRESPONSESUCCESS;
-	}else{
-		return LINKLISTRESPONSEDENY;
+		usleep(waiter*rand()/INT_MAX);
 	}
 }
 
-struct LinkList * LinkListCreate( struct ListItem * me, struct ThreadManagerCache * theCache){
-	if(me == NULL){
-		me = ListItemCreate(me, theCache);
-	}
-	struct LinkList * newList = (struct LinkList *)(malloc(sizeof(struct LinkList)));
-	newList->listLock = 0;
-	newList->indexLock = 1;
-	newList->specialLock = 1;
-	newList->firstItem = me;
-	
-	newList->theCache = theCache;
-	
-	newList->lastItem = me;
-	newList->listLength = 1;
-	newList->indexedItems = (struct ListItem **)(malloc(sizeof(struct ListItem *)));
-	(newList->indexedItems)[0] = me;
-	return newList;
+void LinkListRelease( struct LinkList * me ){
+	pthread_mutex_unlock( me->myThreadControlLock );
 }
 
-struct ListItem * LinkListPush( struct LinkList * const me, const char behaviorType, volatile void * * newContents, size_t newEntrySize, int contentsLength ){
-	if( behaviorType == LINKLISTBASIC ){
-		LinkListLock( me , LINKLISTLOCKLIST );
-
-		struct ListItem * newLinkListEntry = (struct ListItem *)malloc(sizeof(struct ListItem));
-		newLinkListEntry = ListItemCreate(newLinkListEntry, me->theCache);
-
-		for(int i = 0; i < contentsLength; i++){
-			ListItemPush( newLinkListEntry,  (void *)newContents[i] );
-		}
+char LinkListSet( void * self, const int index, void * value){
+	struct LinkList * me = (struct LinkList *)self;
+	LinkListKnock( me );
+	struct ListItem * currentIndex = me->firstItem;
+	int i= 0;
+	for( i = 0; i < index; i++ ){
+		currentIndex = currentIndex->nextItem;
 		
-		newLinkListEntry->previousItem = me->lastItem;
-	
-		me->lastItem->nextItem = newLinkListEntry;
-		me->lastItem = newLinkListEntry;
-		++(me->listLength);
-		me->listLock = 0;
-		return newLinkListEntry;
+	}/*printf("the list item is at %p, should be index %i",currentIndex, i);*/
+
+	currentIndex->func->set( currentIndex, 0, value );
+	LinkListRelease( me );
+}
+
+void * LinkListGet( void * self, const int index ){
+	struct LinkList * me = (struct LinkList *)self;
+	LinkListKnock( me );
+	struct ListItem * currentIndex = me->firstItem;
+	for( int i = 0; i < index; i++ ){
+		currentIndex = currentIndex->nextItem;
 	}
-	return NULL;
+	LinkListRelease( me );
+	return currentIndex;
+}
+
+char LinkListAppendLink( struct LinkList * me, struct ListItem * newItem ){
+	if( me->lastItem != NULL ){
+		newItem->previousItem = me->lastItem;
+		me->lastItem->nextItem = newItem;
+	
+	}
+	newItem->nextItem = NULL;
+	me->lastItem = newItem;
+	++me->listLength;
+}
+
+char LinkListDeleteLink( struct LinkList * me, struct ListItem * old){
+	old->previousItem->nextItem = old->nextItem;
+	old->nextItem->previousItem = old->previousItem;
+	--(me->listLength);
+}
+
+char LinkListPush( void * self, void * value){
+	struct LinkList * me = (struct LinkList *)self;
+	LinkListKnock( me );
+	struct ListItem * newLinkListEntry = ListItemCreate( NULL, me->theCache );
+	ListItemPush( newLinkListEntry,  value );
+	struct ListItem * theLastItem = me->lastItem;
+	
+	if( me->listLength == 0 ){
+		me->firstItem = newLinkListEntry;
+	}
+	
+	if( theLastItem != NULL ){
+		ListItemKnock( theLastItem );
+	}
+	LinkListAppendLink( me, newLinkListEntry );
+	if( theLastItem != NULL ){
+		ListItemRelease( theLastItem );
+	}
+	
+	LinkListRelease( me );
+}
+
+
+void * LinkListPop( void * self, const int count ){
+	struct LinkList * me = (struct LinkList *)self;
+	if( verbosity > 2 ){
+		printf("LL is popping %i values.", count );
+	}
+	if( me->listLength == 0 ){
+			return NULL;
+	}
+	if( verbosity > 4 ){
+		printf("locking linked list\n");
+	}
+	LinkListKnock( me );
+	if( verbosity > 4 ){
+		printf("linked list locked, locking item %p\n", me->lastItem);
+	}
+	/*ListItemKnock( me->lastItem );*/
+	
+	struct ListItem * output = me->lastItem;
+	if( verbosity > 4 ){
+		printf("output has been set to %p\n", output);
+	}
+	me->lastItem = output->previousItem;
+	if( verbosity > 4 ){
+		printf("last item now equal to %p\n", me->lastItem );
+	}
+	ListItemRelease( output );
+
+	if( me->lastItem != NULL ){
+		if( verbosity > 4 ){
+			printf("list not tempty, %p is last item\n",me->lastItem);
+		}
+		ListItemKnock( me->lastItem );
+		me->lastItem->nextItem = NULL;
+		ListItemRelease( me->lastItem );
+	}
+
+	--(me->listLength);
+	if(me->listLength == 0){
+		me->firstItem = NULL;
+	}
+	LinkListRelease( me );
+	if( verbosity > 4 ){
+		printf("returning %p\n", output);
+	}
+
+	return output;
+}
+
+
+void defineLinkListFunctions(){
+	defineDoubleVoidFunctions();
+	defineListItemFunctions();
+	LinkListFunctionSet.get = &LinkListGet;
+	LinkListFunctionSet.set = &LinkListSet;
+	LinkListFunctionSet.push = &LinkListPush;
+	LinkListFunctionSet.pop = &LinkListPop;
+
+
+	/*ListItemFunctionSet.shift = &ListItemShift;
+	*ListItemFunctionSet.unshift = &ListItemUnshift;
+	*/
+
 }
 
 #ifdef __cplusplus

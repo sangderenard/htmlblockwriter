@@ -47,6 +47,11 @@ extern "C" {
  #define MEMOCREATETHREADRESPONSE 9
  #define MEMOSHUTDOWN 10
  
+ #define MEMOGENERALINUSE 12
+ 
+ int verbosity = 0;
+ 
+ 
  struct FunctionSet{
 	void * (*get)(void *, const int);
 	char (*set)(void *, const int, void *);
@@ -87,12 +92,8 @@ struct ManagedDoubleVoid{
 	char watched;
 	pthread_t watcher;
 	
-	pthread_mutex_t * myThreadControlLock; /* for tokens granted by manager */
-	
-	/*added to try and diagnose a race condition */
+	pthread_mutex_t * myThreadControlLock;
 	struct ThreadManagerPostOfficeBox * myThreadControlPostbox;
-	/* end of modified section */
-	
 	
 	struct ThreadManagerPostOfficeBox * myPostbox; /* contains lock for mailbox */
 	struct ThreadManagerCache * theCache;
@@ -121,6 +122,7 @@ struct ManagedDoubleVoid{
 struct ListItem{
 	struct ThreadManagerPostOfficeBox * myPostbox; 
 	pthread_mutex_t * myThreadControlLock;
+	struct ThreadManagerPostOfficeBox * myThreadControlPostbox;
 	struct ThreadManagerCache * theCache;
 	
 	char watched;
@@ -138,44 +140,13 @@ struct ListItem{
 	
 	int contentsIndexOffeset;
 	int contentsIndexEnd;
-	
-	/*
-	 * instead of expanding functionality of the double void immediately
-	 * perhaps whatever abstractions and functions I want should be
-	 * part of the list item, then the double void would be a general
-	 * dynamic array and the listitem would be the featured version
-	 * 
-	 * ideas:
-	 * 
-	 * redirect to buffer input{
-	 * 
-	 * if there's extra space in a list item neighbor and
-	 * the list item's array is even momentarily busy, 
-	 * redirect the data to the neighbor and fill it back
-	 * into the self when it's convenient.
-	 * 
-	 * this could be negotiated by either a list item thread
-	 * or a double void thread
-	 * 
-	 * shifting by index offset{
-	 * 
-	 * if it would be inconvenient to rewrite an entire array to accomodate shifting
-	 * consider the beginning to be a wrapping of the ending and move indexes
-	 * 
-	 * contiguous virtualization{
-	 * 
-	 * use neighbors to pretend to be only part of a larger array
-	 *
-	 * 
-	 * 
-	 *  */
-	
-	
+
 };
 
 struct LinkList{
 	struct ThreadManagerPostOfficeBox * myPostbox; 
 	pthread_mutex_t * myThreadControlLock;
+	struct ThreadManagerPostOfficeBox * myThreadControlPostbox;
 	struct ThreadManagerCache * theCache;
 	
 	char watched;
@@ -189,6 +160,8 @@ struct LinkList{
 	struct ListItem ** specialIndexedItems;
 	int * specialItemIndexes;
 	int specialItemListLength;
+	
+	struct FunctionSet * func;
 };
  
  struct memo{
@@ -249,36 +222,29 @@ char LinkListLock( struct LinkList * me, const char );
 char resolveIndexes(struct LinkList *);
 char resolveSpecialIndexes(struct LinkList *);
 
-struct ListItem * ListItemCreate( struct ListItem *, ThreadManagerCache	* );
+struct ListItem * ListItemCreate( struct ListItem *, struct ThreadManagerCache	* );
+char ListItemSet( void *, const int, void *);
+void* ListItemGet( void *, const int );
 char ListItemPush( void *, void * );
-void* ListItemGet( void *, int );
-
-struct LinkList * LinkListCreate( struct ListItem *, struct ThreadManagerCache * );
-struct ListItem * LinkListPush( struct LinkList * const, const char, volatile void * * , size_t, int );
+void * ListItemPop( void *, const int );
 
 
-
-
-
-
-
-
+struct LinkList * LinkListCreate( struct LinkList *, struct ThreadManagerCache * );
+char LinkListSet( void *, const int, void * );
+void * LinkListGet( void *, const int);
+char LinkListPush( void *, void * );
+void* LinkListPop( void *, const int );
 
 struct StringTree{
 	
 };
 
-
-
- 
-
-
 struct memo * newMemo();
 
 void simpleMemoCopy( struct memo * memoToCopy, volatile struct memo * memoToOverwrite ){
-	int verbosity = 0;
 	
-	if( verbosity > 0 ){
+	
+	if( verbosity > 3 ){
 		printf("memocopy target %p intended value %i from %p\n", &(memoToOverwrite->type), memoToCopy->type, &(memoToCopy->type));
 	}
 
@@ -290,16 +256,16 @@ void simpleMemoCopy( struct memo * memoToCopy, volatile struct memo * memoToOver
 	memoToOverwrite->contents = memoToCopy->contents;
 	memoToOverwrite->memoMutex = memoToCopy->memoMutex;
 	
-	if( verbosity > 0 ){
+	if( verbosity > 4 ){
 		printf("memocopy has set %p to equal values at %p\n", memoToOverwrite, memoToCopy);
 		printf("memocopy the type value location was %p now %p value %i\n", &(memoToCopy->type), &(memoToOverwrite->type), memoToOverwrite->type );
 	}
 }
 
 void blankMemo( volatile struct memo * memoToBlank, const int memosToBlank ){
-	 int verbosity = 0;
+	 
 	 struct memo blankMemo;
-	 if( verbosity > 0 ){
+	 if( verbosity > 3 ){
 		printf("blankmemo: new blank memo %p\n", &blankMemo );
 	}
 	 blankMemo.type = 0;
@@ -310,7 +276,7 @@ void blankMemo( volatile struct memo * memoToBlank, const int memosToBlank ){
 	 blankMemo.contents = NULL;
 	 blankMemo.memoMutex = NULL;
 	 for(int i = 0; i < memosToBlank; ++i ){
-		 if( verbosity > 0 ){
+		 if( verbosity > 4 ){
 			printf("setting %p values to blank values at %p\n", &(memoToBlank[i]), &blankMemo);
 		}
 		 simpleMemoCopy( &blankMemo, &(memoToBlank[i]) );
@@ -336,9 +302,9 @@ int ThreadManagerCopyWithVerify(struct memo * memoToCopy, volatile struct memo *
 }
 
 struct memo * ThreadManagerScan( volatile struct memo * page, int pageSize, char * scanType ){
-	int verbose = 0, verbosity = 0;
+	
 	/* first and last entry for linked list entries */
-	if(verbosity > 2){
+	if(verbosity > 5){
 		printf("ThreadManagerScan starting\n");
 	}
 	for( int i = 1; i < pageSize - 1; ++i ){
@@ -358,13 +324,13 @@ struct memo * ThreadManagerScan( volatile struct memo * page, int pageSize, char
 			}
 			if( ( page[i].memoMutex == NULL ) || !(pthread_mutex_trylock( page[i].memoMutex )) ){
 				if( page[i].memoMutex == NULL ){
-					if(verbose > 0){
+					if(verbosity > 0){
 						printf("the memo mutex is null\n");
 					}
 				}
 				
 				struct memo * returnMemo = (struct memo *)malloc(sizeof(struct memo));
-				if(verbose > 0){
+				if(verbosity > 0){
 					printf("threadscan is making a blank memo %p to send to the thread manager\n", returnMemo);
 				}
 				blankMemo( returnMemo, 1 );
@@ -372,18 +338,18 @@ struct memo * ThreadManagerScan( volatile struct memo * page, int pageSize, char
 					printf("thread scan is making a xerox..\n");
 				}
 				ThreadManagerCopyWithVerify( (struct memo *)(&(page[i])), returnMemo );
-				if(verbose > 0){
+				if(verbosity > 0){
 					printf("thread scan: memo %p type %i lock %p generated for manager\n", 
 						returnMemo, returnMemo->type, returnMemo->memoMutex); 
 				}
 				blankMemo( (struct memo *)(&(page[i])), 1);
-				if(verbose > 0){
+				if(verbosity > 0){
 					printf("thread scan blanked memo %p\n", (struct memo *)(&(page[i])));
 				}
 				return returnMemo;
 			}else{
-				if(verbose > 0){
-					printf("the discovered memo %p is still locked\n", &(page[i]), page[i].memoMutex);
+				if(verbosity > 0){
+					printf("the discovered memo %p is still locked with key %p\n", &(page[i]), page[i].memoMutex);
 				}
 			}
 		}
@@ -468,7 +434,7 @@ void ThreadManagerBlankPage( volatile struct memo * pageToBlank ){
 
 
 struct memo * postMemo(struct memo * memoToPost, struct ThreadManagerCache const * theCache ){
-	int verbosity = 0;
+	
 		
 	volatile struct memo * page;
 	pthread_mutex_t * lock;
@@ -537,6 +503,7 @@ int InitializeTheThreadManagerCache( int maxPageCount, int maxThreadCount, int m
 
 	theCache->ledger->ledgerBlockSize = 300;
 	int initialLedgerLength = theCache->ledger->ledgerBlockSize;
+	theCache->ledger->length = 0;
 
 
 	theCache->ledger->keyHolderInboxKeys =
@@ -559,13 +526,15 @@ int InitializeTheThreadManagerCache( int maxPageCount, int maxThreadCount, int m
 	theCache->validationLock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
 	theCache->returnLock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
 	 
-	 theCache->ledgerLock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
+	theCache->ledgerLock = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
 	 
 	pthread_mutex_init(theCache->cacheLock, NULL);
 	pthread_mutex_lock(theCache->cacheLock);
 	
 	pthread_mutex_init(theCache->ledgerLock, NULL);
 	pthread_mutex_lock(theCache->ledgerLock);
+	
+	/*theCache->ledger.length = 0;*/
 	
 	pthread_mutex_init(theCache->threadListLock, NULL);
 	pthread_mutex_lock(theCache->threadListLock);
@@ -606,7 +575,7 @@ pthread_t * canITalkToYourManagerPlease(struct ThreadManagerCache * thisStarbux 
 }
 
 struct ThreadManagerPostOfficeBox * getAPostBox( void * contents ){
-	int verbosity = 0;
+	
 	struct ThreadManagerPostOfficeBox * returnValue = 
 				(struct ThreadManagerPostOfficeBox *)malloc(sizeof(ThreadManagerPostOfficeBox));
 	returnValue->mailboxKey = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
@@ -650,7 +619,7 @@ void simpleKeyReturn( struct ThreadManagerCache * theCache, struct ThreadManager
 }
 
 struct ThreadManagerPostOfficeBox * simpleKeyRequest( struct ThreadManagerCache * theCache, void * contents ){
-	int verbosity = 0;
+	
 	struct ThreadManagerPostOfficeBox * returnValue = getAPostBox( contents );
 	pthread_mutex_lock(returnValue->mailboxKey);
 	struct memo * memoToPost = (struct memo *)malloc(sizeof(struct memo));
@@ -718,7 +687,7 @@ void ThreadManagerIncrementTheLedger( struct ThreadManagerKeyLedger * theLedger,
 }
 
 void ThreadManagerIssueKeyToPostBox( struct memo * requestMemo, struct ThreadManagerCache * theCache ){
-	int verbosity = 0;
+	
 	if( verbosity > 0 ){
 		printf("key issuer: locking memo %p with key %p\n", requestMemo, requestMemo->memoMutex );
 	}
@@ -771,7 +740,7 @@ void ThreadManagerIssueKeyToPostBox( struct memo * requestMemo, struct ThreadMan
 }
 
 void * threadManager(void * Johnny){
-	int verbosity = 0;
+	
 	struct ThreadManagerCache * const theCache = (struct ThreadManagerCache *)((void**)Johnny)[0];
 	
 	int memosPerPage = theCache->memosPerPage;
@@ -835,7 +804,7 @@ void * threadManager(void * Johnny){
 		pthread_mutex_unlock( myLocks[1] );
 		
 		pthread_mutex_lock( myLocks[0] );
-		if(verbosity > 2){
+		if(verbosity > 5){
 			printf("preparing to scan the queue...\n");
 		}
 		returnMemo = ThreadManagerScan( queuePage, memosPerPage, NULL );
@@ -890,6 +859,10 @@ void * threadManager(void * Johnny){
 				}
 				
 				pthread_mutex_lock( theCache->threadListLock );
+				
+				theCache->threadList[theCache->currentThreadCount] = returnMemo->destination;
+				++theCache->currentThreadCount;
+				
 				/*add the thread to the list */
 				pthread_mutex_unlock( theCache->threadListLock );
 				
