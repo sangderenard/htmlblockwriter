@@ -12,11 +12,44 @@
 #define MAXHTMLWORDLENGTH  50
 
 
+
+
+
+
+
+
+
+/*
+ * 
+ * alright, I'm sleepy and I don't want to figure out tonight how to
+ * get the features of printf's variable substitution to work with
+ * my char buffer idea. I have some thoughts on how to do it, but
+ * I don't want to start in on it now.
+ * that's enough for tonight.
+ * 
+ */
+
+
+
+
+
+
+
+
+
+
 char *divGrid(int width, int height, char style){
 	return NULL;
 }
 
 int main(void) {
+	
+	RollingCharBuffer * screen;
+	screen = initializeRollingCharBuffer( 500, NULL );
+	pthread_t * printThread = (pthread_t *)malloc(sizeof(pthread_t));
+	pthread_create(printThread, NULL, printScreen, (void *)screen);
+	
+	
 	int testingDoubleVoid = 1;
 	int testingListItem = 1;
 	int testingLinkList = 1;
@@ -65,7 +98,7 @@ int main(void) {
 	/*void * testObjects[] = { testDoubleVoid, testListItem, testLinkList };*/
 
 for(int iterations = 0; iterations < 10; ++iterations){	
-	int maxtestlength = 100000000;
+	int maxtestlength = 10000;
 	for( int testLength = 1; testLength < maxtestlength; testLength = testLength * 10 ){
 	
 		for( int l = 0; l < 2 && l < testLength; ++l ){
@@ -221,5 +254,7 @@ for(int iterations = 0; iterations < 10; ++iterations){
 		}
 	}	
 }
+
+	DoubleVoidDestructRecursive( testDoubleVoid );
 	return 0;
 }

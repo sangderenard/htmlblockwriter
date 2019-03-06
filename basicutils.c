@@ -3,90 +3,40 @@ extern "C" {
 #endif
 
 #include "./basicutils.h"
+
+#include "./strings.c"
+#include "./rollingcharbuffer.c"
+#include "./printer.c"
+#include "./memo.c"
+
+#include "./threadmanager.c"
+#include "./keyring.c"
+
 #include "./manageddoublevoid.c"
 #include "./linklist.c"
 
 
 
-char *stringCopy(const char * const source){
-	size_t sourceSize = strlen(source);
-	if( sourceSize < 1 ){
-		char * output = (char *)malloc(1);
-		output[0]='\0';
-		return output;
-	}
-	++sourceSize;
-	char * output;
-	output = (char *)malloc(sourceSize);
-	for(unsigned int i = 0; i < sourceSize; i++){
-		output[i] = source[i];
-	}
-	return output;
+void generalKnock( pthread_mutex_t * const door ){
+	int sleepTimer = 0;
+	int sleepTime = 0;
+	while( pthread_mutex_trylock( door ) ){
+		if(sleepTimer > 1000){printf("%p is hanging...", door);};
+		if(verbosity > 4){printf("knocking (%p)...\n", door);};
+		if(sleepTimer < 1000){++sleepTimer;};
+		sleepTime = round((float)(rand() * sleepTimer)/(float)INT_MAX);
+		sleepTime = sleepTime * sleepTime;
+		usleep(sleepTime);
+	} 
+	if(verbosity > 3){printf("opened %p\n", door);};
+	return;
 }
 
-char *stringCombine(char * stringOne, char * stringTwo, const char middleChar, const char endChar){
-	if( stringOne[0] == '\0' ){
-		if( stringTwo[0] == '\0' ){
-			char * output = stringCopy("\0");
-			return output;
-		}
-		return stringTwo;
-	}else if( stringTwo[0] == '\0' ){
-		return stringOne;
-	}
-	int stringOneSize = (int)strlen(stringOne);
-	int stringTwoSize = (int)strlen(stringTwo);
-	int middleCharSize = 0;
-	if( middleChar != '\0' ){
-		middleCharSize = 1;
-	}
-	int endCharSize = 0;
-	if( endChar != '\0' ){
-		endCharSize = 1;
-	}
-	
-	int middleSize = stringOneSize + middleCharSize;
-	int combinedSize = middleSize + stringTwoSize; 
-	int stringSize = combinedSize + endCharSize;
-	int outputSize = stringSize + 1;
-
-	char * output = (char *)malloc((size_t)outputSize);
-	
-	for(int i = 0, j=0; i < outputSize; ++i){
-		if(i < stringOneSize){
-			output[i] = stringOne[i];
-		}else if(i < middleSize){
-			output[i] = middleChar;
-		}else if(i < combinedSize){
-			output[i] = stringTwo[j++];
-		}else if(i < stringSize){
-			output[i] = endChar;
-		}else{
-			output[i] = '\0';
-		}
-	}
-free(stringTwo);
-
-	return output;
-}
-
-char *stringArrayCombine(char * * strings, int length, const char middleChar, const char endChar){
-	char * output = stringCopy("\0");
-	int stringWritten = 0;
-	for(int i = 0; i < length; ++i){
-		if(strings[i] == '\0'){
-			continue;
-		}
-		char * newOutput = stringCombine(output, strings[i], middleChar, endChar);
-
-		free(output);
-		output = newOutput;
-		++stringWritten;
-	}
-	if(stringWritten == 0){
-		return output;
-	}
-	return output;
+int randomSleep( int maxSleep ){
+	int r = rand();
+	int sleep = floor(((float)maxSleep*(float)r)/(float)INT_MAX); 
+	usleep(sleep);
+	return sleep;
 }
 
 

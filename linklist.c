@@ -35,18 +35,17 @@ struct ListItem * ListItemCreate( struct ListItem * me, struct ThreadManagerCach
 	return me;
 }
 
+void ListItemDestructRecursive( struct ListItem * me ){
+	DoubleVoidDestructRecursive( &(me->contents) );
+	free(me->myPostbox->contents);
+	free(me->myPostbox->mailboxKey);
+	free(me->myThreadControlPostbox->contents);
+	free(me->myThreadControlPostbox->mailboxKey);
+}
+
+
 void ListItemKnock( struct ListItem * me ){
-	int waiter = 0;
-	/*printf("I'm %p", me);*/
-	while( pthread_mutex_trylock( me->myThreadControlLock ) ){
-	/*	if(waiter < 200){*/
-			++waiter;
-			if(waiter > 10){exit(1);}
-		/*}*/
-		int sleep = floor(((float)(float)waiter * (float)rand()) / (float)INT_MAX);
-		if(verbosity > 3){ printf("usleep(%i) in LI Knock\n",sleep); }
-		usleep(sleep);
-	}
+	generalKnock( me->myThreadControlLock );
 }
 
 void ListItemRelease( struct ListItem * me ){
@@ -103,6 +102,7 @@ void * ListItemPop( void * self, int count){
 	}
 }
 
+
 void defineListItemFunctions(){
 	defineDoubleVoidFunctions();
 	ListItemFunctionSet.get = &ListItemGet;
@@ -145,13 +145,7 @@ struct LinkList * LinkListCreate( struct LinkList * me, struct ThreadManagerCach
 }
 
 void LinkListKnock( struct LinkList * me ){
-	int waiter = 0;
-	while( pthread_mutex_trylock( me->myThreadControlLock ) ){
-		if(waiter < 200){
-			++waiter;
-		}
-		usleep(waiter*rand()/INT_MAX);
-	}
+	generalKnock( me->myThreadControlLock );
 }
 
 void LinkListRelease( struct LinkList * me ){
@@ -271,6 +265,9 @@ void * LinkListPop( void * self, const int count ){
 	return output;
 }
 
+void destroyLinkListRecursive( struct LinkList * me ){
+	
+}
 
 void defineLinkListFunctions(){
 	defineDoubleVoidFunctions();

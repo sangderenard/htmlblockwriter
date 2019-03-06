@@ -5,6 +5,20 @@ extern "C" {
 
 struct FunctionSet DoubleVoidFunctionSet;
 
+
+/* 
+ * ScheduleUpdateDoubleVoid is intended to set the urgency of need to
+ * change the size of the memory allocation for the array.
+ * Currently, it is primarily used when indexes are called that are
+ * within the range of allocation, but outside the range of previously
+ * instantiated array entries.
+ * 
+ * It may, in the future, perform more roles than it does now, but it
+ * should always be used as a quick means of communicating between
+ * the thread that is using the array and the thread that is
+ * managing the array.
+ * */
+
 char scheduleUpdateDoubleVoid(struct ManagedDoubleVoid * const me){
 	
 	float workerThresholdAdjustment = 1.4;
@@ -18,23 +32,29 @@ char scheduleUpdateDoubleVoid(struct ManagedDoubleVoid * const me){
 	
 }
 
+/* It took a while to get this to work, so I anticipate that there are problems that will need changing later
+ * and it seems to be the place where the program stalls out in valgrind, trying to negotiate the mutex
+ * locks on two threads at once using random intervals is not something valgrind is designed for
+ * 
+ * 
+ * The intention of this function is to be called by a thread which is using an array and has
+ * called for an index outside of the current allocated range, or otherwise an action has
+ * purturbed the function which obtains data from addresses for the array such that
+ * a worker thread has been decided to be launched. It might be better to define
+ * threads whose only purpose in life is to facilitate these kinds of thread handshakes.
+ * I would say that the thread handler should do that, but currently it only
+ * works on its dedicated blocks of memory for recieving memos.
+*/
+
 void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
-	/* create a memo, send it, ask for permission to start a thread  */
 	if(verbosity > 0){
 		printf("the negotiator is securing a mailbox\n");
 	}
 	
-	
-	/* this section pairs with other modified sections marked with comments
-	 * as a shot in the dark being put together */
-	
+	/* consider standardizing... this is where the proposed keychain struct might come in */
 	/*struct ThreadManagerPostOfficeBox * threadRequestMailbox = getAPostBox( NULL );*/
 	struct ThreadManagerPostOfficeBox * threadRequestMailbox = me->myPostbox;
-	
-	
-	/* end of modification area */
-	
-	
+
 	if(verbosity > 0){
 		printf("dv neg:using postbox %p with key %p.\n", me->myPostbox, threadRequestMailbox->mailboxKey);
 	}
@@ -64,7 +84,7 @@ void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
 	while( keepWaiting ){
 		++keepWaiting;
 		if( pthread_mutex_trylock( threadRequestMailbox->mailboxKey ) ){
-			usleep(100);
+			randomSleep(1000);
 			if(verbosity > 0){
 				printf("dv neg: can't get into mailbox %p with lock %p %i\r", threadRequestMailbox, threadRequestMailbox->mailboxKey, keepWaiting);
 			}
@@ -80,7 +100,7 @@ void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
 				printf("dv neg: I'm seeing type value %i at location %p\n", threadRequestMailbox->contents->type, &(threadRequestMailbox->contents->type));
 			}
 			pthread_mutex_unlock( threadRequestMailbox->mailboxKey );
-			usleep(100*rand()/INT_MAX);
+			randomSleep(1000);
 		}else if( threadRequestMailbox->contents->type == MEMOCREATETHREADRESPONSE ){
 			if(verbosity > 0){
 				printf("dv neg: recieved sreponse %i\n", threadRequestMailbox->contents->type);
@@ -112,9 +132,9 @@ void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
 						pthread_mutex_unlock( me->myThreadControlLock );
 						int timetostop = 0;
 						while( !timetostop ){
+							randomSleep(1000);
 							while( pthread_mutex_trylock(me->myThreadControlLock)){
-								/*printf("can't open %p it's locked\n", me->myThreadControlLock);*/
-								usleep(100*rand()/INT_MAX);
+								printf("can't open %p it's locked\n", me->myThreadControlLock);
 							}
 							if(me->watched == 0){
 								pthread_mutex_unlock(me->myThreadControlLock);
@@ -137,6 +157,22 @@ void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
 
 }
 
+
+/* This is the function which is called in the event that an index has been
+ * accessed which is outside the range allocated, or otherwise the
+ * worker thread has decided that now is a better time to update the
+ * array allocations than would otherwise be chosen
+ * 
+ * Originally the worker thread would call the function itself, which 
+ * is still what I would prefer. For the purposes of diagnosing thread
+ * sycnhronization and race condition avoidance, the worker
+ * currently flags down the access function, so updates only
+ * occur when the code expects them to not occur - which is to say
+ * that every update as of right now is an interruption. that is not
+ * supposed to be the case, and it is worth experimenting at some point
+ * with allowing the worker to lock access and update on its own.
+ *
+ * */
 
 char updateDoubleVoid(struct ManagedDoubleVoid * const me){
 	
@@ -276,8 +312,8 @@ char updateDoubleVoid(struct ManagedDoubleVoid * const me){
 	return 0;
 }
 
-
-	
+/* this function, like any initialization, sets the default values in the struct so that
+ * they don't have to be manually instantiated each time an array is to be used*/
 
 volatile void * initializeDoubleVoid(struct ManagedDoubleVoid * me, const int * const bufferLength, struct ThreadManagerCache * theCache ){
 		me->func = &DoubleVoidFunctionSet;
@@ -311,34 +347,29 @@ volatile void * initializeDoubleVoid(struct ManagedDoubleVoid * me, const int * 
 		return me->self;
 }
 
+/* throughout my code on ths project, release and knock are the functions
+ * which time and monitor pthread mutex lock requests and which also
+ * unlock mutexes.
+*/
+
 int DoubleVoidRelease(struct ManagedDoubleVoid * const me){
 	
-	if(verbosity > 0){
+	if(verbosity > 4){
 		printf("doublevoidKnock unlock %p\n", me->myThreadControlLock);
 	}
 	pthread_mutex_unlock(me->myThreadControlLock);
 }
 
 int DoubleVoidKnock(struct ManagedDoubleVoid * const me){
-	
-	int sleepTimer = 0;
-	
-	while( pthread_mutex_trylock(me->myThreadControlLock)  ){
-		if(verbosity > 1){
-			printf("doublevoidknock is knocking\n");
-		}
-		if(sleepTimer > 100){
-			usleep(100);
-		}else{
-			usleep(++sleepTimer);
-		}
-	} 
-	if(verbosity > 0){
-		printf("doublevoidknock lock %p\n", me->myThreadControlLock);
-	}
+	generalKnock( me->myThreadControlLock );
 	return 1;
 }
 
+/* As of right now in this project any data structures are expected to have
+ * a certain function set. Eventually that set is to be larger, but currently
+ * it contains get, set, push, and pop.
+ * 
+ * */
 
 char DoubleVoidPush(void * self, void * value){
 	struct ManagedDoubleVoid * me = (struct ManagedDoubleVoid *)self;
@@ -430,6 +461,12 @@ void * DoubleVoidUnshift(void * self, const int count){
 	
 }
 
+/* data structures which have the standard function set are expected
+ * to have a function set pointer, which will need instantiation
+ * as a global variable to avoid having to make copies and carry them
+ * around
+ * 
+ * */
 
 void defineDoubleVoidFunctions(){
 	DoubleVoidFunctionSet.get = &DoubleVoidGet;
@@ -442,6 +479,14 @@ void defineDoubleVoidFunctions(){
 
 }
 
+
+/* Garbage collection on this project is getting out of hand and needs
+ * addressing soon. The basic data structures are working, so 
+ * proper management of allocated memory should probably be addressed
+ * before adding new proposed functions and structs.
+ * 
+ * */
+
 void DoubleVoidDestruct(struct ManagedDoubleVoid * const me){
 	for(int i = me->length; i < me->maxLength; ++i){
 		free((void *)(me->self)[i]);
@@ -450,18 +495,23 @@ void DoubleVoidDestruct(struct ManagedDoubleVoid * const me){
 }
 
 void DoubleVoidDestructRecursive(struct ManagedDoubleVoid * const me){
-	
 	for(int i = 0; i < me->length; ++i){
-		if(verbosity == 1){
-			printf("destroying allocation %p\n", me->self[i]);
+		if(verbosity > 0 ){
+			printf("destroying allocation %p at index %i\n", me->self[i], i);
 		}
 		free((void *)(me->self[i]));
 	}
-	if(verbosity == 1){
-		printf("destroying the array allocation %p\n", me->self);
-	}
-	DoubleVoidDestruct( me );
+	
+	free(me->myPostbox->contents);
+	free(me->myPostbox->mailboxKey);
+	free(me->myThreadControlPostbox->contents);
+	free(me->myThreadControlPostbox->mailboxKey);
+	
 }
+
+/* doubleVoid is the low level function for obtaining indexes, and 
+ * implicitly triggering udpates of memory allocation or signaling
+ * the need for such, using updateDoubleVoid and scheduleupdateetc...*/
 
 volatile void * doubleVoid(struct ManagedDoubleVoid * const me, const int i){
 	
@@ -529,6 +579,24 @@ volatile void * doubleVoid(struct ManagedDoubleVoid * const me, const int i){
 	}
 }
 
+/* this is the thread which manages a doublevoid struct. Currently the
+ * things that it does are not particularly special - which is to say that
+ * they do not take particuar advantage of the availability of a
+ * different thread on a different core. What it does right now could
+ * have been implemented inline much faster in the doublevoid struct
+ * 
+ * The purpose of this is, in fact, much later to be realized. When the
+ * thread manager has access to information about load and timing and
+ * analysis from different manager functions like this, then the 
+ * manager functions could coordinate with the thread handler to adapt
+ * each struct and set of data and allocations relative to activities
+ * in other managed variables.
+ * 
+ * In other words, currently this doesn't do anything requiring threads.
+ * Eventually, this should be the interface between one instance of a
+ * struct and all instances of similar structs with or without managers.
+ * */
+
 void *doubleVoidWorker(void * requestedChild){
 	
 	int myId = rand();
@@ -538,7 +606,7 @@ void *doubleVoidWorker(void * requestedChild){
 		if(verbosity > 5){
 			printf("can't stop the clock %p\n", ((struct ManagedDoubleVoid *)requestedChild)->myThreadControlLock);
 		}
-		usleep(100*rand()/INT_MAX);
+		randomSleep(1000);
 	}
 	
 	struct ManagedDoubleVoid * myChild;
@@ -564,7 +632,7 @@ void *doubleVoidWorker(void * requestedChild){
 		float needUpdateDrift = 0;
 		
 		while(keepWatching < 100 ){
-			usleep( (keepWatching)*(keepWatching) * 333*rand()/INT_MAX );
+			randomSleep( (keepWatching)*(keepWatching) );
 	
 	
 			DoubleVoidKnock( myChild );
@@ -626,6 +694,8 @@ void *doubleVoidWorker(void * requestedChild){
 	return NULL;
 }
 
+/* part of the initialization of any managed struct will be registering
+ * with the thread controller and being issued keys*/
 
 ThreadManagerPostOfficeBox * DoubleVoidThreadManagerHandshake( struct ManagedDoubleVoid * me, struct ThreadManagerCache * threadManagerCache ){
 	
