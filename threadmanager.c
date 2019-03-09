@@ -14,59 +14,101 @@ struct memo * ThreadManagerScan( volatile struct memo * page, int pageSize, char
 	if(verbosity > 5){
 		printf("ThreadManagerScan starting\n");
 	}
-	for( int i = 1; i < pageSize - 1; ++i ){
-		if( page[i].type != 0 ){
-			if(verbosity > 1){
-				printf("scan: tyepe %i at %p lock %p\n", (int)page[i].type, &(page[i]), page[i].memoMutex);
-			}
-			
-			/* stop putting in code ruining diagnostic
-			 * printf calls looking at uninitialized crap
-			 * without a check for null
-			 **/
-			
-			
-			if( 0 && page[i].memoMutex != NULL ){
-				/*printf("%i\n", pthread_mutex_trylock( page[i].memoMutex ));*/
-			}
-			if( ( page[i].memoMutex == NULL ) || !(pthread_mutex_trylock( page[i].memoMutex )) ){
-				if( page[i].memoMutex == NULL ){
-					if(verbosity > 0){
-						printf("the memo mutex is null\n");
-					}
+	if(page[0].type == MEMOSHUTDOWN){
+		return (struct memo *)(&page[0]);
+	}
+	volatile struct memo * currentPage = page;
+	while( currentPage != NULL ){
+		for( int i = 1; i < pageSize - 1; ++i ){
+			if( currentPage[i].type != 0 ){
+				if( verbosity > 1){
+					printf("scan: tyepe %i at %p lock %p\n", (int)currentPage[i].type, &(currentPage[i]), currentPage[i].memoMutex);
 				}
 				
-				struct memo * returnMemo = (struct memo *)malloc(sizeof(struct memo));
-				if(verbosity > 0){
-					printf("threadscan is making a blank memo %p to send to the thread manager\n", returnMemo);
+				/* stop putting in code ruining diagnostic
+				 * printf calls looking at uninitialized crap
+				 * without a check for null
+				 **/
+				
+				
+				if( 0 && currentPage[i].memoMutex != NULL ){
+					/*printf("%i\n", pthread_mutex_trylock( page[i].memoMutex ));*/
 				}
-				blankMemo( returnMemo, 1 );
-				if(verbosity > 1){
-					printf("thread scan is making a xerox..\n");
-				}
-				ThreadManagerCopyWithVerify( (struct memo *)(&(page[i])), returnMemo );
-				if(verbosity > 0){
-					printf("thread scan: memo %p type %i lock %p generated for manager\n", 
-						returnMemo, returnMemo->type, returnMemo->memoMutex); 
-				}
-				blankMemo( (struct memo *)(&(page[i])), 1);
-				if(verbosity > 0){
-					printf("thread scan blanked memo %p\n", (struct memo *)(&(page[i])));
-				}
-				return returnMemo;
-			}else{
-				if(verbosity > 0){
-					printf("the discovered memo %p is still locked with key %p\n", &(page[i]), page[i].memoMutex);
+				if( ( currentPage[i].memoMutex == NULL ) || !(pthread_mutex_trylock( currentPage[i].memoMutex )) ){
+					if( currentPage[i].memoMutex == NULL ){
+						if(verbosity > 0){
+							printf("the memo mutex is null\n");
+						}
+					}
+					
+					struct memo * returnMemo = (struct memo *)malloc(sizeof(struct memo));
+					if(verbosity > 0){
+						printf("threadscan is making a blank memo %p to send to the thread manager\n", returnMemo);
+					}
+					blankMemo( returnMemo, 1 );
+					if(verbosity > 1){
+						printf("thread scan is making a xerox..\n");
+					}
+					ThreadManagerCopyWithVerify( (struct memo *)(&(currentPage[i])), returnMemo );
+					if(verbosity > 0){
+						printf("thread scan: memo %p type %i lock %p generated for manager\n", 
+							returnMemo, returnMemo->type, returnMemo->memoMutex); 
+					}
+					blankMemo( (struct memo *)(&(currentPage[i])), 1);
+					if(verbosity > 0){
+						printf("thread scan blanked memo %p\n", (struct memo *)(&(currentPage[i])));
+					}
+					return returnMemo;
+				}else{
+					if(verbosity > 0){
+						printf("the discovered memo %p is still locked with key %p\n", &(currentPage[i]), currentPage[i].memoMutex);
+					}
 				}
 			}
 		}
+		currentPage = (volatile struct memo *)currentPage[0].recipient;
 	}
 	
 	return NULL;
 }
+void ThreadManagerBlankPage(volatile struct memo * );
+volatile struct memo * ThreadManagerAddPage( volatile struct memo * firstPage ){
+	const struct ThreadManagerCache * const theCache = (struct ThreadManagerCache *)(firstPage->contents);
+	volatile struct memo * currentPage = (volatile struct memo *)firstPage->sender;
+
+	if( currentPage == NULL ){
+		currentPage = (volatile struct memo *)calloc(theCache->memosPerPage, sizeof(struct memo));
+		currentPage[0].sender = (void *)firstPage;
+		currentPage[0].type = firstPage[0].type;
+		currentPage[0].origin = firstPage[0].origin;
+		currentPage[0].destination = firstPage[0].destination;
+		currentPage[0].recipient = NULL;
+		currentPage[0].memoMutex = firstPage[0].memoMutex;
+		currentPage[0].contents = firstPage[0].contents;
+		firstPage->sender = (void *)currentPage;
+		firstPage->recipient = (void *)currentPage;
+		ThreadManagerBlankPage( currentPage );
+		return currentPage;
+		
+	}else{
+		volatile struct memo * newPage = (volatile struct memo *)calloc(theCache->memosPerPage, sizeof(struct memo));
+		newPage[0].type = firstPage[0].type;
+		newPage[0].origin = firstPage[0].origin;
+		newPage[0].destination = firstPage[0].destination;
+		newPage[0].recipient = NULL;
+		newPage[0].sender = (void *)firstPage;
+		newPage[0].memoMutex = firstPage[0].memoMutex;
+		newPage[0].contents = firstPage[0].contents;
+		currentPage[theCache->memosPerPage-1].recipient = (void *)newPage;
+		currentPage[0].recipient = (void*)newPage;
+		ThreadManagerBlankPage( newPage );
+		firstPage->sender = (void *)newPage;
+		return newPage;
+	}
+}
 
 volatile struct memo * ThreadManagerEndOfLastPage( volatile struct memo * firstPage ){
-
+printf("setting lock %p\n", firstPage->memoMutex );
 	pthread_mutex_lock( firstPage->memoMutex );
 	 	
 	 const struct ThreadManagerCache * const cacheInfo = (struct ThreadManagerCache *)(firstPage->contents);
@@ -80,16 +122,22 @@ volatile struct memo * ThreadManagerEndOfLastPage( volatile struct memo * firstP
 	 
 	 
 	 volatile struct memo * memoAddressIWant = NULL;
-
-	 for( int i = memosPerPage-1; i >= 0; --i ){
+	int i = memosPerPage - 1;
+	 for(; i >= 0; --i ){
 		 if( currentPage[i].type != 0 ){
 
 			 memoAddressIWant = &(currentPage[i+1]);
+			 break;
 		 }
 	 }
 	 
+	 if( i == memosPerPage - 1 ){
+		 printf("adding a page");
+		 currentPage = ThreadManagerAddPage( firstPage );
+		 memoAddressIWant = &(currentPage[1]);
+	 }
 	 
-	 
+	 printf("first available memo is %p at index %i\n", memoAddressIWant, i);
 	 return memoAddressIWant;
 }
 
@@ -110,6 +158,7 @@ struct memo * postMemo(struct memo * memoToPost, struct ThreadManagerCache const
 	pthread_mutex_t * lock;
 	
 	switch( memoToPost->type ){
+		case MEMOTHREADCLOSING:
 		case MEMOKEYRETURN:
 			page = theCache->returnPage;
 			lock = theCache->returnLock;
@@ -128,10 +177,11 @@ struct memo * postMemo(struct memo * memoToPost, struct ThreadManagerCache const
 	int success = 0;
 	while( success == 0 ){
 		volatile struct memo * endOfLastPage = ThreadManagerEndOfLastPage( page );
-		if(verbosity > 1){
-			printf("postMemo is posting memo with type %i\n", memoToPost->type );
+		if( verbosity > 1){
+			printf("postMemo is posting memo with type %i lock %p\n", memoToPost->type, memoToPost->memoMutex );
 		}
 		success = ThreadManagerCopyWithVerify(memoToPost, endOfLastPage);
+		printf("unlocking %p\n", lock);
 		pthread_mutex_unlock(lock);
 	}
 }
@@ -225,13 +275,15 @@ int InitializeTheThreadManagerCache( int maxPageCount, int maxThreadCount, int m
 	
 	pthread_mutex_unlock(theCache->cacheLock);
 }
-
+int boxesCreated = 0;
 struct ThreadManagerPostOfficeBox * getAPostBox( void * contents ){
 	
 	struct ThreadManagerPostOfficeBox * returnValue = 
 				(struct ThreadManagerPostOfficeBox *)malloc(sizeof(ThreadManagerPostOfficeBox));
+				
 	returnValue->mailboxKey = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
 	pthread_mutex_init(returnValue->mailboxKey, NULL);
+	printf("\n\n%i created box %p key %p\n\n", ++boxesCreated, returnValue, returnValue->mailboxKey);
 	if( verbosity > 0 ){
 		printf("get a post box issued key %p in memo %p\n", returnValue->mailboxKey, returnValue);
 	}
@@ -270,7 +322,7 @@ struct ThreadManagerPostOfficeBox * simpleKeyRequest( struct ThreadManagerCache 
 	pthread_mutex_lock(returnValue->mailboxKey);
 	struct memo * memoToPost = (struct memo *)malloc(sizeof(struct memo));
 	memoToPost->type = MEMOKEYREQUEST;
-	pthread_t * callerOnTheLine = (pthread_t *)malloc(sizeof(pthread_t *));
+	pthread_t * callerOnTheLine = (pthread_t *)malloc(sizeof(pthread_t));
 	*callerOnTheLine = pthread_self();
 	memoToPost->origin = callerOnTheLine;
 	memoToPost->destination = canITalkToYourManagerPlease( theCache );
@@ -278,10 +330,11 @@ struct ThreadManagerPostOfficeBox * simpleKeyRequest( struct ThreadManagerCache 
 	memoToPost->sender = returnValue;
 	memoToPost->recipient = (void *)(theCache->queuePage);
 	memoToPost->memoMutex = returnValue->mailboxKey;
-	if(verbosity > 0){
-		printf("simpleKeyRequest is posting a key request memo %p\n", memoToPost);
+	if( verbosity > 0){
+		printf("simpleKeyRequest is posting a key request memo %p with key %p\n", memoToPost, memoToPost->memoMutex);
 	}
 	postMemo( memoToPost, theCache );
+	free( memoToPost );
 	pthread_mutex_unlock(returnValue->mailboxKey);
 	return returnValue;
 }
@@ -339,7 +392,7 @@ void ThreadManagerIncrementTheLedger( struct ThreadManagerKeyLedger * theLedger,
 
 void ThreadManagerIssueKeyToPostBox( struct memo * requestMemo, struct ThreadManagerCache * theCache ){
 	
-	if( verbosity > 0 ){
+	if(verbosity > 0 ){
 		printf("key issuer: locking memo %p with key %p\n", requestMemo, requestMemo->memoMutex );
 	}
 	/*pthread_mutex_lock( requestMemo->memoMutex );*/
@@ -386,12 +439,13 @@ void ThreadManagerIssueKeyToPostBox( struct memo * requestMemo, struct ThreadMan
 	 * if making decisions about a memo on hand from elsewhere
 	 * this is why the memomutex isn't being assigned. it should
 	 * already be there if things are being done correctly*/
-			 
-	pthread_mutex_unlock( requestMemo->memoMutex );
+	if( requestMemo->memoMutex != NULL ){
+		pthread_mutex_unlock( requestMemo->memoMutex );
+	}
 }
 
 
-
+int boxesDestroyed = 0;
 
 void * threadManager(void * Johnny){
 	
@@ -437,22 +491,61 @@ void * threadManager(void * Johnny){
 	*(char *)(((void**)Johnny)[2]) = 1;
 	
 	pthread_mutex_unlock((pthread_mutex_t *)((void**)Johnny)[1]);
-	
+
 	while( queuePage[0].type != MEMOSHUTDOWN ){
 		if(calm == 1){
 			usleep(calmdelay);
 		}
-		
+		struct memo * returnMemo = NULL;
+		while(returnMemo != NULL){
+			
 		pthread_mutex_lock( myLocks[2] );
-		struct memo * returnMemo = ThreadManagerScan( returnPage, memosPerPage, NULL );
+		returnMemo = ThreadManagerScan( returnPage, memosPerPage, NULL );
 		pthread_mutex_unlock( myLocks[2] );
 		
 		if( returnMemo != NULL ){
+			printf("returnscan: type: %i key: %p\n", returnMemo->type, returnMemo->memoMutex );
 			if(verbosity > 0){
 				printf("Memo scanning revealed return memo: %p\n", returnMemo);
 			}
+			if( returnMemo->memoMutex == NULL){
+				printf("this is impossible ");
+			}
+			if( returnMemo->type == MEMOKEYRETURN ){ /* && returnMemo->memoMutex != NULL && returnMemo->contents != NULL ){*/
+				printf(" deleting the key %p \n", returnMemo->memoMutex	);
+				
+				/*printf("deleting the mailbox memo\n");*/
+				if( returnMemo->contents != NULL ){
+					pthread_t * memoOrigin = 
+						((struct memo *)(struct ThreadManagerPostOfficeBox *)returnMemo->contents)->origin;
+					
+					
+					
+					if( memoOrigin != NULL && *memoOrigin != *(theCache->threadList[0]) ){
+						free( memoOrigin );
+					}
+					/*free( ((struct ThreadManagerPostOfficeBox *)returnMemo->contents)->contents );*/
+					printf("\n\n%i destroying box %p\n\n",++boxesDestroyed,((struct ThreadManagerPostOfficeBox *)returnMemo->contents) );
+					free( ((struct ThreadManagerPostOfficeBox *)returnMemo->contents) );
+				}
+				
+				
+				free( returnMemo );
+			}else if( returnMemo->type == MEMOTHREADCLOSING ){
+				pthread_mutex_lock( theCache->threadListLock );
+				for( int i = 0; i < theCache->currentThreadCount; ++i){
+					if( *theCache->threadList[i] == *returnMemo->origin ){
+						for( int j = i+1; j < theCache->currentThreadCount; ++j){
+							theCache->threadList[j-1] = theCache->threadList[j];
+						}
+						--theCache->currentThreadCount;
+						break;
+					}
+				}
+				pthread_mutex_unlock( theCache->threadListLock );
+			}
 		}
-		
+	}
 		pthread_mutex_lock( myLocks[1] );
 		returnMemo = ThreadManagerScan( validationPage, memosPerPage, NULL) ;
 		pthread_mutex_unlock( myLocks[1] );
@@ -469,6 +562,69 @@ void * threadManager(void * Johnny){
 		 * */
 		
 		/* pthread_mutex_unlock( myLocks[0] ); */
+		if( returnMemo != NULL && returnMemo->type == MEMOSHUTDOWN ){
+		printf("shutting down the thread manager\n");
+			volatile struct memo * currentPage = theCache->queuePage;
+			while( currentPage != NULL ){
+				for(int i = 1; i < memosPerPage; ++i){
+					if( 0 ){
+					;
+					}
+				}
+				currentPage = (volatile struct memo *)currentPage->recipient;
+				if(currentPage != NULL){
+					free(currentPage->sender);
+				}
+			}
+			free( (void*)theCache->queuePage );
+			
+			currentPage = theCache->validationPage;
+			while( currentPage != NULL ){
+				for(int i = 1; i < memosPerPage; ++i){
+					if( 0 ){
+					;
+					}
+				}
+				currentPage = (volatile struct memo *)currentPage->recipient;
+				if(currentPage != NULL){
+					free(currentPage->sender);
+				}
+			}
+			free( (void *)theCache->validationPage );
+		
+			currentPage = theCache->returnPage;
+			while( 0 && currentPage != NULL ){
+				for(int i = 1; i < memosPerPage-1; ++i){
+					if( currentPage[i].type == MEMOKEYRETURN && currentPage[i].memoMutex != NULL ){
+						pthread_mutex_lock( currentPage[i].memoMutex );
+						printf("clearing out the last requests\n");
+						free( currentPage[i].memoMutex );
+						free( ((struct ThreadManagerPostOfficeBox *)currentPage[i].contents)->contents );
+						printf("\n\ndestroying box %p\n\n",((struct ThreadManagerPostOfficeBox *)currentPage[i].contents) );
+						free( ((struct ThreadManagerPostOfficeBox *)currentPage[i].contents) );
+					}
+				}
+				currentPage = (volatile struct memo *)currentPage->recipient;
+				
+				if(currentPage != NULL){
+					free(currentPage->sender);
+				}
+			}
+							
+			free( (void *)theCache->returnPage );
+
+			free( theCache->validationLock );
+			free( theCache->queueLock );
+			free( theCache->returnLock );
+			
+			free( theCache->ledger->keyHolderInboxKeys );
+			free( theCache->ledger->keyHolderInboxes );
+			free( theCache->ledger->keyHolders );
+			free( theCache->ledger->mutexKeys );
+
+			return NULL;
+		}
+		
 		
 		if( returnMemo != NULL ){
 			if(verbosity > 0){
@@ -480,7 +636,7 @@ void * threadManager(void * Johnny){
 				}
 				ThreadManagerIssueKeyToPostBox( returnMemo, theCache );
 			}else if( returnMemo->type == MEMOCREATETHREADREQUEST ){
-				if(verbosity >0){
+				if(1 || verbosity >0){
 					printf("thread manager: setting lock %p\n", theCache->threadListLock );
 				}
 				
@@ -508,17 +664,20 @@ void * threadManager(void * Johnny){
 				returnMemo->sender = (void *)(theCache->threadList);
 				/*pthread_mutex_lock( ((struct ThreadManagerPostOfficeBox *)(returnMemo->recipient))->mailboxKey );*/
 				ThreadManagerCopyWithVerify( returnMemo, ((struct ThreadManagerPostOfficeBox *)(returnMemo->recipient))->contents );
+				
 				if(verbosity >0){
 					printf("thread manager: attempting to unlock %p\n", ((struct ThreadManagerPostOfficeBox *)(returnMemo->recipient))->mailboxKey );
 				}
 				
-				pthread_mutex_lock( theCache->threadListLock );
-				
-				theCache->threadList[theCache->currentThreadCount] = returnMemo->destination;
-				++theCache->currentThreadCount;
+				if(*threadResponse > 0){
+					pthread_mutex_lock( theCache->threadListLock );
+					theCache->threadList[theCache->currentThreadCount] = returnMemo->destination;
+					++theCache->currentThreadCount;
+					pthread_mutex_unlock( theCache->threadListLock );
+				}
 				
 				/*add the thread to the list */
-				pthread_mutex_unlock( theCache->threadListLock );
+
 				
 				pthread_mutex_unlock( ((struct ThreadManagerPostOfficeBox *)(returnMemo->recipient))->mailboxKey );	
 				
@@ -531,8 +690,11 @@ void * threadManager(void * Johnny){
 
 			if(verbosity > 1){
 				printf("thread manager: Memo scanning revealed request queue memo: %p\n", returnMemo);
+				printf("%i\n", returnMemo->type );
 				printf("thread manager: The request queue package is %p, containing \"%s\"\n", returnMemo->contents, returnMemo->contents);
 			}
+			
+			free( returnMemo );
 		}
 		/* this is an attempt to find a race condition, may not need to lock page 
 		 * for the duration of this process*/

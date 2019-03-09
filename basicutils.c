@@ -14,7 +14,7 @@ extern "C" {
 
 #include "./manageddoublevoid.c"
 #include "./linklist.c"
-
+#include "./tree.c"
 
 
 void generalKnock( pthread_mutex_t * const door ){

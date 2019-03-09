@@ -52,18 +52,21 @@ void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
 	}
 	
 	/* consider standardizing... this is where the proposed keychain struct might come in */
-	/*struct ThreadManagerPostOfficeBox * threadRequestMailbox = getAPostBox( NULL );*/
-	struct ThreadManagerPostOfficeBox * threadRequestMailbox = me->myPostbox;
+	struct ThreadManagerPostOfficeBox * threadRequestMailbox = getAPostBox( NULL );
+	/*struct ThreadManagerPostOfficeBox * threadRequestMailbox = me->myPostbox;*/
 
 	if(verbosity > 0){
 		printf("dv neg:using postbox %p with key %p.\n", me->myPostbox, threadRequestMailbox->mailboxKey);
 	}
-	pthread_mutex_lock( threadRequestMailbox->mailboxKey );
+	while( pthread_mutex_trylock( threadRequestMailbox->mailboxKey ) ){
+		/*printf("%p is locked", threadRequestMailbox->mailboxKey );*/
+		randomSleep(1000);
+	};
 	if(verbosity > 0){
 		printf("dv neg: locked %p using key %p\n", threadRequestMailbox, threadRequestMailbox->mailboxKey);
 	}
 	threadRequestMailbox->contents->type = MEMOCREATETHREADREQUEST;
-	threadRequestMailbox->contents->origin = getCallerOnTheLine();
+	threadRequestMailbox->contents->origin = me->watcher;
 	threadRequestMailbox->contents->destination = canITalkToYourManagerPlease( me->theCache );
 	threadRequestMailbox->contents->sender = threadRequestMailbox;
 	threadRequestMailbox->contents->recipient = (void *)(me->theCache->queuePage);
@@ -86,7 +89,7 @@ void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
 		if( pthread_mutex_trylock( threadRequestMailbox->mailboxKey ) ){
 			randomSleep(1000);
 			if(verbosity > 0){
-				printf("dv neg: can't get into mailbox %p with lock %p %i\r", threadRequestMailbox, threadRequestMailbox->mailboxKey, keepWaiting);
+				printf("dv neg: can't get into mailbox %p with lock %p %i\n", threadRequestMailbox, threadRequestMailbox->mailboxKey, keepWaiting);
 			}
 			continue;
 		}
@@ -127,7 +130,7 @@ void DoubleVoidNegotiateAdditionalThread( struct ManagedDoubleVoid * me ){
 						if(verbosity > 0){
 							printf("thread confirmation code: %i", threadStartConfirmation);
 						}
-						pthread_create(&(me->watcher), NULL, doubleVoidWorker, (void *)me);
+						pthread_create(me->watcher, NULL, doubleVoidWorker, (void *)me);
 						pthread_mutex_unlock( threadRequestMailbox->mailboxKey );
 						pthread_mutex_unlock( me->myThreadControlLock );
 						int timetostop = 0;
@@ -326,9 +329,12 @@ volatile void * initializeDoubleVoid(struct ManagedDoubleVoid * me, const int * 
 		
 		DoubleVoidKnock( me );
 		
+		me->watcher = (pthread_t *)malloc(sizeof(pthread_t));
 		me->resizeCount = 0;
 		gettimeofday((timeval *)&(me->timeSinceUpdated), NULL);
 		me->watched = 0;
+		me->shutdownWatcher = 0;
+		me->deleteBehavior = -1;
 		me->needUpdate = .1;
 		me->size = sizeof(void *)*initialLength;
 		me->maxLength = initialLength;
@@ -433,6 +439,9 @@ char DoubleVoidSet(void * self, const int index, void * input){
 	
 	
 	volatile void ** storageLocation = (volatile void **)doubleVoid( me, index );
+	if( me->deleteBehavior == -1 && *storageLocation != NULL ){
+		free( (void *)*storageLocation );
+	}
 	*storageLocation = (volatile void *)input;
 	
 	
@@ -466,7 +475,68 @@ void * DoubleVoidUnshift(void * self, const int count){
  * as a global variable to avoid having to make copies and carry them
  * around
  * 
+ * 
+ * 
+ * char (*splice)(void *, const int, const int, void *, const int, const int);
+ * 
  * */
+ 
+char DoubleVoidSplice(void * self, const int beginOnIndex, const int entriesToDelete, 
+						void * other, const int otherBeginOnIndex, const int otherEntriesToInsert ){
+	struct ManagedDoubleVoid * me = (struct ManagedDoubleVoid *)self;
+	/*printf("splice on %p, at %i, for %i entries\n", me, beginOnIndex, entriesToDelete);*/
+	size_t newSize;
+	int newMaxLength;
+	
+	int newLength = me->length - entriesToDelete + otherEntriesToInsert;
+	
+	
+	volatile void ** newSelf;
+	
+	if( newLength > me->maxLength ){
+		newMaxLength = me->maxLength - entriesToDelete + otherEntriesToInsert;
+		newSize = me->size - (entriesToDelete * sizeof(void *) ) + (otherEntriesToInsert * sizeof(void *) );
+		newSelf = (volatile void **)malloc(newSize);
+	}else{
+		newSelf = me->self;
+	}
+	
+	int i;
+	if( newSelf != me->self ){
+		for(i = 0; i < beginOnIndex; ++i){
+			newSelf[i] = me->self[i];
+		}
+	}else{
+		i = beginOnIndex;
+	}
+	int j = i;
+	for(; i < beginOnIndex + entriesToDelete; ++i){
+		if(me->deleteBehavior == -1){
+			/*printf("freeing entry %p, %i of %i\n", (me->self)[i], i, beginOnIndex+entriesToDelete);*/
+			free((void *)(me->self[i]));
+		}else{
+			(me->self[i]) = NULL;
+		}
+	}
+	for(int k = 0; j < beginOnIndex + otherEntriesToInsert; ++j, ++k){
+		newSelf[j] = ((struct ManagedDoubleVoid *)other)->self[otherBeginOnIndex+k];
+	}
+	if( newSelf != me->self ){
+		for(; i < me->length; ++i, ++j){
+			newSelf[j] = me->self[i];
+		}
+		free(me->self);
+		me->maxLength = newMaxLength;
+		me->size = newSize;
+		me->self = newSelf;
+		for(; i < newMaxLength; ++i){
+			(me->self)[i] = NULL;
+		}
+	}
+
+	me->length = newLength;
+
+}
 
 void defineDoubleVoidFunctions(){
 	DoubleVoidFunctionSet.get = &DoubleVoidGet;
@@ -477,6 +547,7 @@ void defineDoubleVoidFunctions(){
 	DoubleVoidFunctionSet.shift = &DoubleVoidShift;
 	DoubleVoidFunctionSet.unshift = &DoubleVoidUnshift;
 
+	DoubleVoidFunctionSet.splice = &DoubleVoidSplice;
 }
 
 
@@ -488,25 +559,57 @@ void defineDoubleVoidFunctions(){
  * */
 
 void DoubleVoidDestruct(struct ManagedDoubleVoid * const me){
-	for(int i = me->length; i < me->maxLength; ++i){
-		free((void *)(me->self)[i]);
+
+	if( me->self != NULL ){
+		/*free(me->myThreadControlLock);
+		*free(me->myThreadControlPostbox->contents);
+		*free(me->myThreadControlPostbox);
+		*/
+		
+		pthread_mutex_lock( me->myPostbox->mailboxKey );
+		pthread_mutex_lock( me->myThreadControlLock );
+		me->myThreadControlPostbox->contents->type = MEMOKEYRETURN;
+		me->myThreadControlPostbox->contents->memoMutex = me->myThreadControlPostbox->mailboxKey;
+		me->myPostbox->contents->type = MEMOKEYRETURN;
+		me->myPostbox->contents->memoMutex = me->myPostbox->mailboxKey;
+		me->myThreadControlPostbox->contents->contents = me->myThreadControlPostbox;
+		me->myPostbox->contents->contents = me->myPostbox;
+
+		
+		if( me->watched == 1 ){
+			printf("shutting down watcher");
+			me->shutdownWatcher	= 1;
+			
+			while( me->watched == 1 ){
+				pthread_mutex_unlock( me->myThreadControlLock );
+				randomSleep( 1000 );
+				while( pthread_mutex_trylock( me->myThreadControlLock ) ){
+					randomSleep( 1000 );
+				}
+			}
+			
+			pthread_join( *(me->watcher), NULL );
+			free( me->watcher );
+		}
+		free(me->self);
+		
+		printf("returning thread control key %p\n", me->myThreadControlLock);
+		postMemo( me->myThreadControlPostbox->contents, me->theCache );
+		printf("returning postbox key %p\n", me->myPostbox->mailboxKey);	
+		postMemo( me->myPostbox->contents, me->theCache );
+		pthread_mutex_unlock( me->myThreadControlLock );
+		pthread_mutex_unlock( me->myPostbox->mailboxKey );
+		
+		
+		
 	}
-	free(me->self);
 }
 
 void DoubleVoidDestructRecursive(struct ManagedDoubleVoid * const me){
-	for(int i = 0; i < me->length; ++i){
-		if(verbosity > 0 ){
-			printf("destroying allocation %p at index %i\n", me->self[i], i);
-		}
-		free((void *)(me->self[i]));
-	}
-	
-	free(me->myPostbox->contents);
-	free(me->myPostbox->mailboxKey);
-	free(me->myThreadControlPostbox->contents);
-	free(me->myThreadControlPostbox->mailboxKey);
-	
+	/*printf("destroying a doublevoid");*/
+	me->deleteBehavior = -1;
+	me->func->splice( me, 0, me->length, NULL, 0, 0 );
+	DoubleVoidDestruct( me );
 }
 
 /* doubleVoid is the low level function for obtaining indexes, and 
@@ -611,6 +714,7 @@ void *doubleVoidWorker(void * requestedChild){
 	
 	struct ManagedDoubleVoid * myChild;
 	myChild = (struct ManagedDoubleVoid *)requestedChild;
+	struct ThreadManagerCache * theCache = myChild->theCache;
 	if( myChild->watched == 0 && myChild->needUpdate > 1 ){
 		testParentalBoost = myChild->needUpdate;
 		previousNeed = testParentalBoost;
@@ -636,6 +740,11 @@ void *doubleVoidWorker(void * requestedChild){
 	
 	
 			DoubleVoidKnock( myChild );
+			if( myChild->shutdownWatcher == 1 ){
+				myChild->watched = 0;
+				DoubleVoidRelease( myChild );
+				return NULL;
+			}
 			if( myChild->needUpdate > 1.5){
 				
 				pthread_mutex_lock( myChild->myPostbox->mailboxKey );
@@ -691,6 +800,25 @@ void *doubleVoidWorker(void * requestedChild){
 		myChild->watched = -1;
 		DoubleVoidRelease( myChild );
 	}
+
+	DoubleVoidKnock( myChild );
+	struct memo * returnThreadMemo = (struct memo *)malloc(sizeof( struct memo ));
+	pthread_mutex_t * closingmemomutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
+	pthread_mutex_init( closingmemomutex, NULL );
+	returnThreadMemo->memoMutex = closingmemomutex;
+	pthread_mutex_lock( closingmemomutex );
+	returnThreadMemo->type = MEMOTHREADCLOSING;
+	pthread_t * thisThread = (pthread_t *)malloc(sizeof(pthread_t));
+	*thisThread = pthread_self();
+	returnThreadMemo->origin = thisThread;
+	returnThreadMemo->destination = canITalkToYourManagerPlease( theCache );
+	returnThreadMemo->sender = NULL;
+	returnThreadMemo->recipient = (void*)theCache->returnPage;
+	returnThreadMemo->contents = NULL;
+	/*returnThreadMemo->contents = myChild;*/
+	postMemo( returnThreadMemo, theCache );
+	pthread_mutex_unlock( closingmemomutex );
+	DoubleVoidRelease( myChild );
 	return NULL;
 }
 

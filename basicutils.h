@@ -46,10 +46,10 @@ extern "C" {
  #define MEMOCREATETHREADREQUEST 8
  #define MEMOCREATETHREADRESPONSE 9
  #define MEMOSHUTDOWN 10
- 
+ #define MEMOTHREADCLOSING 13
  #define MEMOGENERALINUSE 12
  
- int verbosity = 0;
+ int verbosity = 8;
  
  
  
@@ -125,11 +125,18 @@ extern "C" {
  * as currently written - but that's the current intention
  * */
 
-
+struct TreeNode{
+	struct TreeNode * parent;
+	struct TreeNode * previousSibling;
+	struct TreeNode * nextSibling;
+	struct TreeNode * firstChild;
+	void * contents;
+};
 
 struct ManagedDoubleVoid{
 	char watched;
-	pthread_t watcher;
+	pthread_t * watcher;
+	char shutdownWatcher;
 	
 	pthread_mutex_t * myThreadControlLock;
 	struct ThreadManagerPostOfficeBox * myThreadControlPostbox;
@@ -147,10 +154,12 @@ struct ManagedDoubleVoid{
 	
 	char method;
 	char temperment;
+	char deleteBehavior;
 
 	int hitTheCliffCount;
 	int previousLength;
 	int length;
+	int initializedLength;
 	int maxLength;
 	
 	volatile void ** self;
@@ -260,6 +269,7 @@ struct Keyring{
 };
 struct RollingCharBuffer{
 	pthread_mutex_t bufferKey;
+	char close;
 	long currentWriteIndex;
 	long currentReadIndex;
 	long size;
