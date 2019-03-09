@@ -37,10 +37,22 @@ struct ListItem * ListItemCreate( struct ListItem * me, struct ThreadManagerCach
 
 void ListItemDestructRecursive( struct ListItem * me ){
 	DoubleVoidDestructRecursive( &(me->contents) );
-	free(me->myPostbox->contents);
-	free(me->myPostbox->mailboxKey);
-	free(me->myThreadControlPostbox->contents);
-	free(me->myThreadControlPostbox->mailboxKey);
+	/*printf("doublevoid deleted\n");*/
+	pthread_mutex_lock( me->myPostbox->mailboxKey );
+	pthread_mutex_lock( me->myThreadControlPostbox->mailboxKey );
+	me->myPostbox->contents->type = MEMOKEYRETURN;
+	me->myPostbox->contents->memoMutex = me->myPostbox->mailboxKey;
+	me->myThreadControlPostbox->contents->type = MEMOKEYRETURN;
+	me->myThreadControlPostbox->contents->memoMutex	= me->myThreadControlPostbox->mailboxKey;
+	me->myPostbox->contents->contents = me->myPostbox;
+	me->myThreadControlPostbox->contents->contents = me->myThreadControlPostbox;
+	postMemo( me->myPostbox->contents, me->theCache );
+	postMemo( me->myThreadControlPostbox->contents, me->theCache );
+	/*printf("keyreturn memo posted\n");*/
+	pthread_mutex_unlock( me->myPostbox->mailboxKey );
+	pthread_mutex_unlock( me->myThreadControlPostbox->mailboxKey );
+	
+	free(me);
 }
 
 
@@ -142,6 +154,18 @@ struct LinkList * LinkListCreate( struct LinkList * me, struct ThreadManagerCach
 	me->listLength = 0;
 	
 	return me;
+}
+
+void LinkListDestructRecursive( struct LinkList * me ){
+	struct ListItem * currentItem = me->firstItem;
+	struct ListItem * nextItem;
+	/*printf("\n\ndeleting a linked list\n\n");*/
+	while(currentItem != NULL){
+		nextItem = currentItem->nextItem;
+		ListItemDestructRecursive( currentItem );
+		/*printf("\n\ndeleted list item\n\n");*/
+		currentItem = nextItem;
+	}
 }
 
 void LinkListKnock( struct LinkList * me ){
@@ -265,9 +289,7 @@ void * LinkListPop( void * self, const int count ){
 	return output;
 }
 
-void destroyLinkListRecursive( struct LinkList * me ){
-	
-}
+
 
 void defineLinkListFunctions(){
 	defineDoubleVoidFunctions();
